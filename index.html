@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Vehicle Acceleration Analyzer V2</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-dark: #0a0e14;
+            --bg-panel: #151921;
+            --border-color: #2d3748;
+            --text-primary: #e8eaed;
+            --text-secondary: #9ca3af;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --accent-yellow: #f59e0b;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            padding: 16px;
+            min-height: 100vh;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .header p {
+            font-size: 11px;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        .status-bar {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            animation: pulse 2s infinite;
+        }
+
+        .status-dot.active {
+            background: var(--accent-green);
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .control-panel {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: var(--bg-panel);
+            border: 2px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 14px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 4px;
+        }
+
+        .btn:active {
+            transform: scale(0.98);
+        }
+
+        .btn.primary {
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            color: var(--bg-dark);
+        }
+
+        .btn.primary.recording {
+            background: var(--accent-red);
+            border-color: var(--accent-red);
+            animation: pulse-btn 1.5s infinite;
+        }
+
+        @keyframes pulse-btn {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
+        }
+
+        .btn.secondary {
+            background: var(--bg-panel);
+            border-color: var(--accent-blue);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .metrics-grid {
+            display: grid;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .metric-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 16px;
+        }
+
+        .metric-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .metric-label {
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .metric-band {
+            font-size: 10px;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        .metric-values {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .metric-item {
+            text-align: center;
+        }
+
+        .metric-item-label {
+            font-size: 9px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            letter-spacing: 1px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+            font-weight: bold;
+            font-family: monospace;
+            line-height: 1;
+        }
+
+        .metric-value.positive {
+            color: var(--accent-green);
+        }
+
+        .metric-value.negative {
+            color: var(--accent-red);
+        }
+
+        .metric-value.total {
+            color: var(--accent-blue);
+        }
+
+        .metric-unit {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-left: 4px;
+        }
+
+        .balance-bar {
+            margin-top: 12px;
+            height: 8px;
+            background: var(--border-color);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .balance-fill {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-green), var(--accent-red));
+            transition: width 0.3s ease;
+        }
+
+        .total-energy {
+            background: linear-gradient(135deg, var(--bg-panel), #1a1f2e);
+            border: 2px solid var(--accent-blue);
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .total-energy-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .total-energy-value {
+            font-size: 48px;
+            font-weight: bold;
+            color: var(--accent-blue);
+            font-family: monospace;
+        }
+
+        .sample-rate {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 10px;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        .recording-time {
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--accent-red);
+            margin: 12px 0;
+            font-family: monospace;
+        }
+
+        .warning {
+            background: rgba(245, 158, 11, 0.1);
+            border: 1px solid var(--accent-yellow);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 16px;
+            font-size: 11px;
+            color: var(--accent-yellow);
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>V.A.A. V2</h1>
+        <p>Vehicle Acceleration Analyzer - Generic Sensor API</p>
+    </div>
+
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div class="status-dot" id="statusDot"></div>
+            <span id="statusText">STANDBY</span>
+        </div>
+        <div style="font-size: 11px; color: var(--text-secondary);">
+            <span id="sampleCount">0</span> SAMPLES
+        </div>
+    </div>
+
+    <div class="control-panel">
+        <button class="btn primary" id="startBtn" onclick="toggleRecording()">START MONITORING</button>
+        <button class="btn secondary" id="resetBtn" onclick="resetMetrics()" disabled>RESET DATA</button>
+    </div>
+
+    <div id="recordingTime" class="recording-time" style="display: none;">00:00</div>
+
+    <div class="metrics-grid">
+        <div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-label">Primary</span>
+                <span class="metric-band">0.5-3.5 Hz</span>
+            </div>
+            <div class="metric-values">
+                <div class="metric-item">
+                    <div class="metric-item-label">UPWARD</div>
+                    <div class="metric-value positive" id="band1Pos">0.00<span class="metric-unit">g</span></div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-item-label">DOWNWARD</div>
+                    <div class="metric-value negative" id="band1Neg">0.00<span class="metric-unit">g</span></div>
+                </div>
+            </div>
+            <div class="balance-bar">
+                <div class="balance-fill" id="band1Bar" style="width: 50%"></div>
+            </div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-label">Chop</span>
+                <span class="metric-band">3.5-9 Hz</span>
+            </div>
+            <div class="metric-values">
+                <div class="metric-item">
+                    <div class="metric-item-label">UPWARD</div>
+                    <div class="metric-value positive" id="band2Pos">0.00<span class="metric-unit">g</span></div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-item-label">DOWNWARD</div>
+                    <div class="metric-value negative" id="band2Neg">0.00<span class="metric-unit">g</span></div>
+                </div>
+            </div>
+            <div class="balance-bar">
+                <div class="balance-fill" id="band2Bar" style="width: 50%"></div>
+            </div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-header">
+                <span class="metric-label">Secondary</span>
+                <span class="metric-band">9-15 Hz</span>
+            </div>
+            <div class="metric-values">
+                <div class="metric-item">
+                    <div class="metric-item-label">UPWARD</div>
+                    <div class="metric-value positive" id="band3Pos">0.00<span class="metric-unit">g</span></div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-item-label">DOWNWARD</div>
+                    <div class="metric-value negative" id="band3Neg">0.00<span class="metric-unit">g</span></div>
+                </div>
+            </div>
+            <div class="balance-bar">
+                <div class="balance-fill" id="band3Bar" style="width: 50%"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="total-energy">
+        <div class="total-energy-label">Total RMS Energy</div>
+        <div class="total-energy-value" id="totalRMS">0.000<span class="metric-unit">g</span></div>
+    </div>
+
+    <div class="sample-rate">
+        SAMPLE RATE: <span id="sampleRate">0</span> Hz | API: <span id="apiType">GENERIC SENSOR</span>
+    </div>
+
+    <div class="metric-card" style="margin-top: 16px; background: rgba(59, 130, 246, 0.1); border-color: var(--accent-blue);">
+        <div class="metric-header">
+            <span class="metric-label">DEBUG INFO</span>
+        </div>
+        <div style="font-size: 10px; color: var(--text-secondary); line-height: 1.6;">
+            <div><strong>API Support:</strong> <span id="debugSupport">Checking...</span></div>
+            <div><strong>Sensor Status:</strong> <span id="debugStatus">Not started</span></div>
+            <div><strong>Current Z:</strong> <span id="debugZ">--</span></div>
+            <div><strong>Raw Readings:</strong> <span id="debugRaw">--</span></div>
+            <div><strong>Error:</strong> <span id="debugError">None</span></div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let isRecording = false;
+        let accelerometerData = [];
+        let accelerometer = null;
+        let lastTimestamp = 0;
+        let actualSampleRate = 0;
+        let startTime = 0;
+        let recordingInterval = null;
+        let sampleCount = 0;
+
+        // Frequency bands configuration
+        const bands = [
+            { name: 'band1', low: 0.5, high: 3.5 },
+            { name: 'band2', low: 3.5, high: 9.0 },
+            { name: 'band3', low: 9.0, high: 15.0 }
+        ];
+
+        // Bandpass filter
+        function bandpassFilter(data, lowFreq, highFreq, sampleRate) {
+            if (data.length < 10) return data;
+
+            // High-pass filter
+            let highPassed = [];
+            const alpha = 0.95;
+            highPassed[0] = data[0];
+            for (let i = 1; i < data.length; i++) {
+                highPassed[i] = alpha * (highPassed[i-1] + data[i] - data[i-1]);
+            }
+
+            // Low-pass filter
+            const windowSize = Math.max(3, Math.floor(sampleRate / (highFreq * 2)));
+            let filtered = [];
+            
+            for (let i = 0; i < highPassed.length; i++) {
+                let sum = 0;
+                let count = 0;
+                const halfWindow = Math.floor(windowSize / 2);
+                
+                for (let j = Math.max(0, i - halfWindow); j <= Math.min(highPassed.length - 1, i + halfWindow); j++) {
+                    sum += highPassed[j];
+                    count++;
+                }
+                filtered[i] = sum / count;
+            }
+
+            return filtered;
+        }
+
+        // Calculate RMS
+        function calculateRMS(data) {
+            if (data.length === 0) return { positive: 0, negative: 0, total: 0 };
+
+            const positiveValues = data.filter(v => v > 0);
+            const negativeValues = data.filter(v => v < 0);
+
+            const rmsPos = positiveValues.length > 0 ? 
+                Math.sqrt(positiveValues.reduce((sum, v) => sum + v * v, 0) / positiveValues.length) : 0;
+            
+            const rmsNeg = negativeValues.length > 0 ? 
+                Math.sqrt(negativeValues.reduce((sum, v) => sum + v * v, 0) / negativeValues.length) : 0;
+
+            const rmsTotal = data.length > 0 ? 
+                Math.sqrt(data.reduce((sum, v) => sum + v * v, 0) / data.length) : 0;
+
+            return {
+                positive: rmsPos,
+                negative: rmsNeg,
+                total: rmsTotal
+            };
+        }
+
+        // Update display
+        function updateDisplay() {
+            if (accelerometerData.length < 20) return;
+
+            const zData = accelerometerData.map(d => d.z);
+            const mean = zData.reduce((a, b) => a + b, 0) / zData.length;
+            const zDataNoGravity = zData.map(v => v - mean);
+
+            let totalRMS = 0;
+            let totalSamples = 0;
+
+            bands.forEach(band => {
+                const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
+                const rms = calculateRMS(filtered);
+
+                document.getElementById(`${band.name}Pos`).innerHTML = 
+                    `${rms.positive.toFixed(3)}<span class="metric-unit">g</span>`;
+                document.getElementById(`${band.name}Neg`).innerHTML = 
+                    `${rms.negative.toFixed(3)}<span class="metric-unit">g</span>`;
+
+                const total = rms.positive + rms.negative;
+                const percentage = total > 0 ? (rms.positive / total * 100) : 50;
+                document.getElementById(`${band.name}Bar`).style.width = `${percentage}%`;
+
+                totalRMS += rms.total * rms.total;
+                totalSamples++;
+            });
+
+            const overallRMS = Math.sqrt(totalRMS / totalSamples);
+            document.getElementById('totalRMS').innerHTML = 
+                `${overallRMS.toFixed(3)}<span class="metric-unit">g</span>`;
+
+            document.getElementById('sampleCount').textContent = accelerometerData.length;
+        }
+
+        // Start/Stop recording
+        async function toggleRecording() {
+            if (!isRecording) {
+                await startRecording();
+            } else {
+                stopRecording();
+            }
+        }
+
+        // Start recording
+        async function startRecording() {
+            try {
+                document.getElementById('debugError').textContent = 'None';
+                document.getElementById('debugStatus').textContent = 'Starting...';
+
+                // Try to create accelerometer with Linear Acceleration Sensor
+                if ('LinearAccelerationSensor' in window) {
+                    try {
+                        accelerometer = new LinearAccelerationSensor({ frequency: 100 });
+                        document.getElementById('apiType').textContent = 'LINEAR ACCEL SENSOR';
+                    } catch (e) {
+                        document.getElementById('debugError').textContent = 'LinearAccel failed: ' + e.message;
+                        throw e;
+                    }
+                } else if ('Accelerometer' in window) {
+                    try {
+                        accelerometer = new Accelerometer({ frequency: 100 });
+                        document.getElementById('apiType').textContent = 'ACCELEROMETER';
+                    } catch (e) {
+                        document.getElementById('debugError').textContent = 'Accelerometer failed: ' + e.message;
+                        throw e;
+                    }
+                } else {
+                    throw new Error('Generic Sensor API not supported');
+                }
+
+                accelerometer.addEventListener('reading', handleReading);
+                accelerometer.addEventListener('error', (event) => {
+                    document.getElementById('debugError').textContent = 'Sensor error: ' + event.error.message;
+                });
+
+                accelerometer.start();
+                document.getElementById('debugStatus').textContent = 'Sensor started';
+
+                isRecording = true;
+                accelerometerData = [];
+                lastTimestamp = 0;
+                startTime = Date.now();
+                sampleCount = 0;
+
+                // Update UI
+                document.getElementById('startBtn').textContent = 'STOP MONITORING';
+                document.getElementById('startBtn').classList.add('recording');
+                document.getElementById('resetBtn').disabled = true;
+                document.getElementById('statusDot').classList.add('active');
+                document.getElementById('statusText').textContent = 'RECORDING';
+                document.getElementById('recordingTime').style.display = 'block';
+
+                recordingInterval = setInterval(updateRecordingTime, 100);
+
+                // Calculate sample rate
+                setTimeout(() => {
+                    if (accelerometerData.length > 10) {
+                        const duration = (accelerometerData[accelerometerData.length - 1].time - 
+                                        accelerometerData[0].time) / 1000;
+                        actualSampleRate = accelerometerData.length / duration;
+                        document.getElementById('sampleRate').textContent = Math.round(actualSampleRate);
+                    }
+                }, 2000);
+
+            } catch (error) {
+                document.getElementById('debugError').textContent = error.message;
+                alert('Error: ' + error.message + '\n\nThis browser/device may not support the Generic Sensor API. Try Chrome on a different device.');
+                isRecording = false;
+            }
+        }
+
+        // Stop recording
+        function stopRecording() {
+            isRecording = false;
+            if (accelerometer) {
+                accelerometer.stop();
+                accelerometer = null;
+            }
+            clearInterval(recordingInterval);
+
+            document.getElementById('startBtn').textContent = 'START MONITORING';
+            document.getElementById('startBtn').classList.remove('recording');
+            document.getElementById('resetBtn').disabled = false;
+            document.getElementById('statusDot').classList.remove('active');
+            document.getElementById('statusText').textContent = 'STANDBY';
+            document.getElementById('recordingTime').style.display = 'none';
+            document.getElementById('debugStatus').textContent = 'Stopped';
+        }
+
+        // Handle sensor reading
+        function handleReading() {
+            if (!isRecording || !accelerometer) return;
+
+            sampleCount++;
+            const now = Date.now();
+
+            // Get Z-axis value (convert m/sÂ² to g: 1g = 9.8 m/sÂ²)
+            const zValue = accelerometer.z / 9.8;
+
+            document.getElementById('debugZ').textContent = zValue.toFixed(3) + ' g';
+            document.getElementById('debugRaw').textContent = 
+                `x:${(accelerometer.x/9.8).toFixed(2)} y:${(accelerometer.y/9.8).toFixed(2)} z:${zValue.toFixed(2)}`;
+
+            accelerometerData.push({
+                time: now,
+                z: zValue
+            });
+
+            // Keep only last 10 seconds
+            const tenSecondsAgo = now - 10000;
+            accelerometerData = accelerometerData.filter(d => d.time > tenSecondsAgo);
+
+            // Update display every 100ms
+            if (now - lastTimestamp > 100) {
+                lastTimestamp = now;
+                updateDisplay();
+            }
+        }
+
+        // Update recording time
+        function updateRecordingTime() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            document.getElementById('recordingTime').textContent = 
+                `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        // Reset metrics
+        function resetMetrics() {
+            accelerometerData = [];
+            
+            ['band1', 'band2', 'band3'].forEach(band => {
+                document.getElementById(`${band}Pos`).innerHTML = '0.00<span class="metric-unit">g</span>';
+                document.getElementById(`${band}Neg`).innerHTML = '0.00<span class="metric-unit">g</span>';
+                document.getElementById(`${band}Bar`).style.width = '50%';
+            });
+            
+            document.getElementById('totalRMS').innerHTML = '0.000<span class="metric-unit">g</span>';
+            document.getElementById('sampleCount').textContent = '0';
+        }
+
+        // Check for sensor support on load
+        window.addEventListener('load', () => {
+            if ('Accelerometer' in window || 'LinearAccelerationSensor' in window) {
+                document.getElementById('debugSupport').textContent = 'Generic Sensor API supported âœ“';
+                document.getElementById('debugSupport').style.color = 'var(--accent-green)';
+            } else {
+                document.getElementById('debugSupport').textContent = 'Generic Sensor API NOT supported âœ—';
+                document.getElementById('debugSupport').style.color = 'var(--accent-red)';
+                document.getElementById('debugError').textContent = 'Try enabling chrome://flags/#enable-generic-sensor-extra-classes';
+            }
+        });
+    </script>
+</body>
+
+</html>
