@@ -1041,13 +1041,13 @@
             return { real: realOut, imag: imagOut };
         }
 
-        // Calculate PSD with optimized downsampling for large datasets
+        // Calculate PSD with aggressive optimization for performance
         function calculatePSD(data, sampleRate) {
-            // Limit data size for performance - downsample if needed
+            // VERY aggressive downsampling for performance
             let processedData = data;
             let effectiveSampleRate = sampleRate;
             
-            const maxSamples = 8192; // Process max 8192 samples
+            const maxSamples = 2048; // Reduced from 8192 to 2048 for better performance
             if (data.length > maxSamples) {
                 const step = Math.ceil(data.length / maxSamples);
                 processedData = [];
@@ -1055,11 +1055,19 @@
                     processedData.push(data[i]);
                 }
                 effectiveSampleRate = sampleRate / step;
+                console.log(`PSD: Downsampled to ${processedData.length} points at ${effectiveSampleRate.toFixed(1)} Hz`);
             }
             
             // Pad to next power of 2
             let n = 1;
             while (n < processedData.length) n <<= 1;
+            
+            // Hard limit
+            if (n > 4096) {
+                n = 4096;
+                processedData = processedData.slice(0, n);
+                console.warn('Limited to 4096 FFT points for performance');
+            }
             
             const real = new Array(n).fill(0);
             const imag = new Array(n).fill(0);
@@ -1070,14 +1078,7 @@
                 real[i] = processedData[i] * window;
             }
             
-            // Perform FFT (only if n is reasonable)
-            if (n > 16384) {
-                console.warn('Dataset too large for FFT, limiting to 16384 points');
-                n = 16384;
-                real.length = n;
-                imag.length = n;
-            }
-            
+            // Perform FFT
             const result = fft(real, imag);
             
             // Calculate power spectrum
@@ -1096,6 +1097,8 @@
                     freqs.push(freq);
                 }
             }
+            
+            console.log(`PSD calculated: ${freqs.length} frequency points up to ${freqs[freqs.length-1].toFixed(1)} Hz`);
             
             return { psd, freqs };
         }
@@ -1169,62 +1172,97 @@
             currentDataset.psd = null;
         }
 
-        // Update PSD plot
+        // Update PSD plot with chunked async processing
         function updatePSDPlot() {
             if (!currentDataset) return;
             
             // Calculate PSD if not already calculated
             if (!currentDataset.psd) {
-                document.getElementById('statusText').textContent = 'CALCULATING PSD...';
+                // Show processing message immediately
+                const statusEl = document.getElementById('psdTitle');
+                statusEl.textContent = 'Calculating PSD... Please wait';
+                statusEl.style.color = '#f59e0b';
                 
+                // Process each axis sequentially with delays
                 setTimeout(() => {
                     try {
-                        // Extract axes
                         const data = currentDataset.data;
-                        const xData = data.map(d => d.x);
-                        const yData = data.map(d => d.y);
-                        const zData = data.map(d => d.z);
                         
-                        // Calculate average tilt (mean of raw including gravity)
+                        // Limit data size aggressively for performance
+                        const maxSamples = 4096;
+                        let step = 1;
+                        if (data.length > maxSamples) {
+                            step = Math.ceil(data.length / maxSamples);
+                            console.log(`Downsampling from ${data.length} to ~${Math.floor(data.length/step)} samples`);
+                        }
+                        
+                        const xData = [];
+                        const yData = [];
+                        const zData = [];
+                        
+                        for (let i = 0; i < data.length; i += step) {
+                            xData.push(data[i].x);
+                            yData.push(data[i].y);
+                            zData.push(data[i].z);
+                        }
+                        
+                        const effectiveSampleRate = currentDataset.sampleRate / step;
+                        
+                        // Calculate means
                         currentDataset.tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
                         currentDataset.tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
                         currentDataset.tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
                         
-                        // Calculate PSDs
-                        console.log('Calculating X PSD...');
-                        const xPSD = calculatePSD(xData.map(v => v - currentDataset.tiltX), currentDataset.sampleRate);
-                        console.log('Calculating Y PSD...');
-                        const yPSD = calculatePSD(yData.map(v => v - currentDataset.tiltY), currentDataset.sampleRate);
-                        console.log('Calculating Z PSD...');
-                        const zPSD = calculatePSD(zData.map(v => v - currentDataset.tiltZ), currentDataset.sampleRate);
+                        statusEl.textContent = 'Calculating X PSD...';
                         
-                        currentDataset.psd = {
-                            x: xPSD,
-                            y: yPSD,
-                            z: zPSD
-                        };
-                        
-                        // Find resonances
-                        currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
-                        currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
-                        currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
-                        
-                        // Calculate ISD (Integrated Spectral Density)
-                        currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
-                        currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
-                        currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
-                        
-                        document.getElementById('statusText').textContent = 'STANDBY';
-                        
-                        // Now update the plot display
-                        updatePSDDisplay();
+                        setTimeout(() => {
+                            const xPSD = calculatePSD(xData.map(v => v - currentDataset.tiltX), effectiveSampleRate);
+                            
+                            statusEl.textContent = 'Calculating Y PSD...';
+                            
+                            setTimeout(() => {
+                                const yPSD = calculatePSD(yData.map(v => v - currentDataset.tiltY), effectiveSampleRate);
+                                
+                                statusEl.textContent = 'Calculating Z PSD...';
+                                
+                                setTimeout(() => {
+                                    const zPSD = calculatePSD(zData.map(v => v - currentDataset.tiltZ), effectiveSampleRate);
+                                    
+                                    currentDataset.psd = {
+                                        x: xPSD,
+                                        y: yPSD,
+                                        z: zPSD
+                                    };
+                                    
+                                    statusEl.textContent = 'Finding resonances...';
+                                    
+                                    setTimeout(() => {
+                                        // Find resonances
+                                        currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
+                                        currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
+                                        currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
+                                        
+                                        // Calculate ISD
+                                        currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
+                                        currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
+                                        currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
+                                        
+                                        statusEl.style.color = '';
+                                        
+                                        // Now update the plot display
+                                        updatePSDDisplay();
+                                        
+                                    }, 50);
+                                }, 50);
+                            }, 50);
+                        }, 50);
                         
                     } catch (error) {
                         console.error('PSD calculation error:', error);
-                        alert('Error calculating PSD: ' + error.message);
-                        document.getElementById('statusText').textContent = 'ERROR';
+                        statusEl.textContent = 'ERROR: ' + error.message;
+                        statusEl.style.color = '#ef4444';
                     }
-                }, 100);
+                }, 50);
                 
                 return;
             }
