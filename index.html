@@ -831,15 +831,29 @@
             // Update UI
             document.getElementById('startBtn').textContent = 'START MONITORING';
             document.getElementById('startBtn').classList.remove('recording');
-            document.getElementById('resetBtn').disabled = false;
-            document.getElementById('saveBtn').disabled = false;
+            document.getElementById('resetBtn').disabled = true; // Keep disabled during processing
+            document.getElementById('saveBtn').disabled = true;
             document.getElementById('statusDot').classList.remove('active');
-            document.getElementById('statusText').textContent = 'STANDBY';
+            document.getElementById('statusText').textContent = 'PROCESSING...';
             document.getElementById('recordingTime').style.display = 'none';
 
-            // Process data into current dataset
+            // Process data asynchronously to avoid freezing UI
             if (accelerometerData.length > 0) {
-                processDataset();
+                setTimeout(() => {
+                    try {
+                        processDataset();
+                        document.getElementById('statusText').textContent = 'STANDBY';
+                        document.getElementById('resetBtn').disabled = false;
+                        document.getElementById('saveBtn').disabled = false;
+                    } catch (error) {
+                        console.error('Processing error:', error);
+                        document.getElementById('statusText').textContent = 'ERROR';
+                        alert('Error processing data: ' + error.message);
+                    }
+                }, 100);
+            } else {
+                document.getElementById('statusText').textContent = 'STANDBY';
+                document.getElementById('resetBtn').disabled = false;
             }
         }
 
@@ -1027,35 +1041,58 @@
             return { real: realOut, imag: imagOut };
         }
 
-        // Calculate PSD
+        // Calculate PSD with optimized downsampling for large datasets
         function calculatePSD(data, sampleRate) {
+            // Limit data size for performance - downsample if needed
+            let processedData = data;
+            let effectiveSampleRate = sampleRate;
+            
+            const maxSamples = 8192; // Process max 8192 samples
+            if (data.length > maxSamples) {
+                const step = Math.ceil(data.length / maxSamples);
+                processedData = [];
+                for (let i = 0; i < data.length; i += step) {
+                    processedData.push(data[i]);
+                }
+                effectiveSampleRate = sampleRate / step;
+            }
+            
             // Pad to next power of 2
             let n = 1;
-            while (n < data.length) n <<= 1;
+            while (n < processedData.length) n <<= 1;
             
             const real = new Array(n).fill(0);
             const imag = new Array(n).fill(0);
             
             // Copy data and apply Hanning window
-            for (let i = 0; i < data.length; i++) {
-                const window = 0.5 * (1 - Math.cos(2 * Math.PI * i / (data.length - 1)));
-                real[i] = data[i] * window;
+            for (let i = 0; i < processedData.length; i++) {
+                const window = 0.5 * (1 - Math.cos(2 * Math.PI * i / (processedData.length - 1)));
+                real[i] = processedData[i] * window;
             }
             
-            // Perform FFT
+            // Perform FFT (only if n is reasonable)
+            if (n > 16384) {
+                console.warn('Dataset too large for FFT, limiting to 16384 points');
+                n = 16384;
+                real.length = n;
+                imag.length = n;
+            }
+            
             const result = fft(real, imag);
             
             // Calculate power spectrum
             const psd = [];
             const freqs = [];
-            const nyquist = sampleRate / 2;
-            const df = sampleRate / n;
+            const nyquist = effectiveSampleRate / 2;
+            const df = effectiveSampleRate / n;
+            
+            const maxFreq = Math.min(55, nyquist * 0.8); // Only up to 55Hz or 80% of Nyquist
             
             for (let i = 0; i < n / 2; i++) {
                 const freq = i * df;
-                if (freq <= 55) {  // Only up to 55Hz
+                if (freq <= maxFreq) {
                     const power = (result.real[i] ** 2 + result.imag[i] ** 2) / n;
-                    psd.push(power / sampleRate); // PSD in (m/s²)²/Hz
+                    psd.push(power / effectiveSampleRate); // PSD in (m/s²)²/Hz
                     freqs.push(freq);
                 }
             }
@@ -1081,6 +1118,8 @@
         function processDataset() {
             if (accelerometerData.length === 0) return;
 
+            console.log('Processing ' + accelerometerData.length + ' samples...');
+
             const duration = (accelerometerData[accelerometerData.length - 1].time - 
                             accelerometerData[0].time) / 1000;
 
@@ -1093,12 +1132,13 @@
                 config: {...config}
             };
 
-            // Calculate statistics
+            // Calculate statistics (this is quick)
             calculateStatistics();
-            updatePSDPlot();
+            
+            console.log('Processing complete');
         }
 
-        // Calculate all statistics
+        // Calculate all statistics (quick calculations only, PSD deferred)
         function calculateStatistics() {
             if (!currentDataset) return;
 
@@ -1114,11 +1154,6 @@
             currentDataset.peakY = Math.max(...yData.map(Math.abs));
             currentDataset.peakZ = Math.max(...zData.map(Math.abs));
             
-            // Average tilt (mean of raw including gravity)
-            currentDataset.tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
-            currentDataset.tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
-            currentDataset.tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
-            
             // RMS vibration (after removing mean)
             const calcRMS = (data) => {
                 const mean = data.reduce((a,b) => a+b, 0) / data.length;
@@ -1130,30 +1165,76 @@
             currentDataset.rmsY = calcRMS(yData);
             currentDataset.rmsZ = calcRMS(zData);
             
-            // Calculate PSDs
-            const xPSD = calculatePSD(xData.map(v => v - currentDataset.tiltX), currentDataset.sampleRate);
-            const yPSD = calculatePSD(yData.map(v => v - currentDataset.tiltY), currentDataset.sampleRate);
-            const zPSD = calculatePSD(zData.map(v => v - currentDataset.tiltZ), currentDataset.sampleRate);
-            
-            currentDataset.psd = {
-                x: xPSD,
-                y: yPSD,
-                z: zPSD
-            };
-            
-            // Find resonances
-            currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
-            currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
-            currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
-            
-            // Calculate ISD (Integrated Spectral Density - total energy)
-            currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
-            currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
-            currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
+            // PSD will be calculated on-demand when viewing PSD tab
+            currentDataset.psd = null;
         }
 
         // Update PSD plot
         function updatePSDPlot() {
+            if (!currentDataset) return;
+            
+            // Calculate PSD if not already calculated
+            if (!currentDataset.psd) {
+                document.getElementById('statusText').textContent = 'CALCULATING PSD...';
+                
+                setTimeout(() => {
+                    try {
+                        // Extract axes
+                        const data = currentDataset.data;
+                        const xData = data.map(d => d.x);
+                        const yData = data.map(d => d.y);
+                        const zData = data.map(d => d.z);
+                        
+                        // Calculate average tilt (mean of raw including gravity)
+                        currentDataset.tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
+                        currentDataset.tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
+                        currentDataset.tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
+                        
+                        // Calculate PSDs
+                        console.log('Calculating X PSD...');
+                        const xPSD = calculatePSD(xData.map(v => v - currentDataset.tiltX), currentDataset.sampleRate);
+                        console.log('Calculating Y PSD...');
+                        const yPSD = calculatePSD(yData.map(v => v - currentDataset.tiltY), currentDataset.sampleRate);
+                        console.log('Calculating Z PSD...');
+                        const zPSD = calculatePSD(zData.map(v => v - currentDataset.tiltZ), currentDataset.sampleRate);
+                        
+                        currentDataset.psd = {
+                            x: xPSD,
+                            y: yPSD,
+                            z: zPSD
+                        };
+                        
+                        // Find resonances
+                        currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
+                        currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
+                        currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
+                        
+                        // Calculate ISD (Integrated Spectral Density)
+                        currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
+                        currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
+                        currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
+                        
+                        document.getElementById('statusText').textContent = 'STANDBY';
+                        
+                        // Now update the plot display
+                        updatePSDDisplay();
+                        
+                    } catch (error) {
+                        console.error('PSD calculation error:', error);
+                        alert('Error calculating PSD: ' + error.message);
+                        document.getElementById('statusText').textContent = 'ERROR';
+                    }
+                }, 100);
+                
+                return;
+            }
+            
+            // PSD already calculated, just update display
+            updatePSDDisplay();
+        }
+
+        // Update PSD display (separate from calculation)
+        function updatePSDDisplay() {
             if (!currentDataset || !currentDataset.psd) return;
 
             // Update header info
