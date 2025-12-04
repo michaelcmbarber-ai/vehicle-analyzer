@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Vehicle Acceleration Analyzer</title>
+    <title>The Barber-Mate</title>
     <style>
+        /* PROPRIETARY - Multimatic / Michael Barber - Not for external distribution */
+        
         * {
             margin: 0;
             padding: 0;
@@ -21,6 +23,7 @@
             --accent-red: #ef4444;
             --accent-blue: #3b82f6;
             --accent-yellow: #f59e0b;
+            --accent-pink: #ec4899;
         }
 
         body {
@@ -41,17 +44,52 @@
         }
 
         .header h1 {
-            font-size: 20px;
+            font-size: 22px;
             font-weight: bold;
-            letter-spacing: 2px;
+            letter-spacing: 3px;
             margin-bottom: 8px;
             text-transform: uppercase;
+            color: var(--accent-blue);
         }
 
         .header p {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-secondary);
             letter-spacing: 1px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            overflow-x: auto;
+        }
+
+        .tab {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            padding: 10px 16px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .tab.active {
+            background: var(--accent-blue);
+            border-color: var(--accent-blue);
+            color: var(--bg-dark);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
         }
 
         .status-bar {
@@ -93,17 +131,18 @@
 
         .control-panel {
             display: grid;
-            gap: 12px;
+            gap: 8px;
             margin-bottom: 20px;
+            grid-template-columns: 1fr 1fr;
         }
 
         .btn {
             background: var(--bg-panel);
             border: 2px solid var(--border-color);
             color: var(--text-primary);
-            padding: 14px;
+            padding: 12px;
             font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: bold;
             letter-spacing: 1px;
             text-transform: uppercase;
@@ -120,6 +159,7 @@
             background: var(--accent-green);
             border-color: var(--accent-green);
             color: var(--bg-dark);
+            grid-column: 1 / -1;
         }
 
         .btn.primary.recording {
@@ -131,11 +171,6 @@
         @keyframes pulse-btn {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.85; }
-        }
-
-        .btn.secondary {
-            background: var(--bg-panel);
-            border-color: var(--accent-blue);
         }
 
         .btn:disabled {
@@ -196,6 +231,14 @@
             letter-spacing: 1px;
         }
 
+        .metric-item-label.bump {
+            color: var(--accent-blue);
+        }
+
+        .metric-item-label.rebound {
+            color: var(--accent-red);
+        }
+
         .metric-value {
             font-size: 28px;
             font-weight: bold;
@@ -203,16 +246,12 @@
             line-height: 1;
         }
 
-        .metric-value.positive {
-            color: var(--accent-green);
-        }
-
-        .metric-value.negative {
-            color: var(--accent-red);
-        }
-
-        .metric-value.total {
+        .metric-value.bump {
             color: var(--accent-blue);
+        }
+
+        .metric-value.rebound {
+            color: var(--accent-red);
         }
 
         .metric-unit {
@@ -233,13 +272,13 @@
         .balance-fill {
             position: absolute;
             height: 100%;
-            background: linear-gradient(90deg, var(--accent-green), var(--accent-red));
+            background: linear-gradient(90deg, var(--accent-blue), var(--accent-red));
             transition: width 0.3s ease;
         }
 
         .total-energy {
-            background: linear-gradient(135deg, var(--bg-panel), #1a1f2e);
-            border: 2px solid var(--accent-blue);
+            background: linear-gradient(135deg, #0d4d3d, #10b981);
+            border: 2px solid var(--accent-green);
             border-radius: 4px;
             padding: 20px;
             text-align: center;
@@ -247,7 +286,7 @@
 
         .total-energy-label {
             font-size: 12px;
-            color: var(--text-secondary);
+            color: #ffffff;
             margin-bottom: 8px;
             letter-spacing: 2px;
             text-transform: uppercase;
@@ -256,28 +295,77 @@
         .total-energy-value {
             font-size: 48px;
             font-weight: bold;
-            color: var(--accent-blue);
+            color: #ffffff;
             font-family: monospace;
         }
 
-        .sample-rate {
-            text-align: center;
-            margin-top: 16px;
-            font-size: 10px;
-            color: var(--text-secondary);
-            letter-spacing: 1px;
+        .plot-container {
+            background: white;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 16px;
+            position: relative;
         }
 
-        .warning {
-            background: rgba(245, 158, 11, 0.1);
-            border: 1px solid var(--accent-yellow);
-            border-radius: 4px;
-            padding: 12px;
-            margin-bottom: 16px;
+        .plot-header {
+            font-family: Arial, sans-serif;
             font-size: 11px;
-            color: var(--accent-yellow);
-            text-align: center;
+            color: #000;
+            margin-bottom: 15px;
+            line-height: 1.6;
         }
+
+        .plot-header strong {
+            font-weight: bold;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 400px;
+            touch-action: none;
+        }
+
+        .plot-controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .plot-controls button {
+            padding: 8px;
+            font-size: 11px;
+        }
+
+        .axis-toggles {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+
+        .axis-toggle {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .axis-toggle input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+        }
+
+        .axis-toggle.x { color: var(--accent-green); }
+        .axis-toggle.y { color: var(--accent-pink); }
+        .axis-toggle.z { color: var(--accent-blue); }
 
         .recording-time {
             text-align: center;
@@ -287,189 +375,359 @@
             margin: 12px 0;
             font-family: monospace;
         }
+
+        .file-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-name {
+            flex: 1;
+            font-size: 12px;
+            word-break: break-all;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .file-actions button {
+            padding: 6px 10px;
+            font-size: 10px;
+        }
+
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-family: monospace;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .config-section {
+            margin-bottom: 16px;
+        }
+
+        .config-section label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
     </style>
 </head>
 <body>
+    <!-- PROPRIETARY APPLICATION - Multimatic / Michael Barber -->
+    
     <div class="header">
-        <h1>V.A.A.</h1>
-        <p>Vehicle Acceleration Analyzer</p>
+        <h1>The Barber-Mate</h1>
+        <p>Professional Vibration Analysis System</p>
     </div>
 
-    <div class="status-bar">
-        <div class="status-indicator">
-            <div class="status-dot" id="statusDot"></div>
-            <span id="statusText">STANDBY</span>
-        </div>
-        <div style="font-size: 11px; color: var(--text-secondary);">
-            <span id="sampleCount">0</span> SAMPLES
-        </div>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('monitor')">MONITOR</div>
+        <div class="tab" onclick="switchTab('psd')">PSD</div>
+        <div class="tab" onclick="switchTab('tilt')">TILT</div>
+        <div class="tab" onclick="switchTab('vibration')">VIBRATION</div>
+        <div class="tab" onclick="switchTab('raw')">RAW</div>
+        <div class="tab" onclick="switchTab('files')">FILES</div>
+        <div class="tab" onclick="switchTab('config')">CONFIG</div>
     </div>
 
-    <div class="control-panel">
-        <button class="btn primary" id="startBtn" onclick="toggleRecording()">START MONITORING</button>
-        <button class="btn secondary" id="resetBtn" onclick="resetMetrics()" disabled>RESET DATA</button>
-        <button class="btn secondary" id="saveBtn" onclick="saveResults()" disabled>SAVE RESULTS</button>
-        <button class="btn secondary" id="configBtn" onclick="toggleConfig()">CONFIGURATION</button>
-    </div>
-
-    <div id="configPanel" class="metric-card" style="display: none; margin-bottom: 16px;">
-        <div class="metric-header">
-            <span class="metric-label">Configuration</span>
-        </div>
-        <div style="padding: 8px 0;">
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">GRAVITY OFFSET (m/s²)</label>
-                <input type="number" id="gravityOffset" value="9.8" step="0.1" style="width: 100%; padding: 8px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace;">
+    <!-- MONITOR TAB -->
+    <div id="monitor-tab" class="tab-content active">
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">STANDBY</span>
             </div>
-            <div style="margin-bottom: 16px;">
-                <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">FILTER ORDER</label>
-                <input type="number" id="filterOrder" value="4" min="2" max="8" step="2" style="width: 100%; padding: 8px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace;">
+            <div style="font-size: 11px; color: var(--text-secondary);">
+                <span id="sampleCount">0</span> SAMPLES
             </div>
-            <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                <div style="font-size: 11px; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">BAND 1 (Primary) - Hz</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <div>
-                        <label style="font-size: 10px; color: var(--text-secondary);">LOW</label>
-                        <input type="number" id="band1Low" value="0.5" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+        </div>
+
+        <div class="control-panel">
+            <button class="btn primary" id="startBtn" onclick="toggleRecording()">START MONITORING</button>
+            <button class="btn" id="resetBtn" onclick="resetMetrics()" disabled>RESET</button>
+            <button class="btn" id="saveBtn" onclick="saveResults()" disabled>SAVE</button>
+        </div>
+
+        <div id="recordingTime" class="recording-time" style="display: none;">00:00</div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Primary</span>
+                    <span class="metric-band" id="band1Range">0.5-3.5 Hz</span>
+                </div>
+                <div class="metric-values">
+                    <div class="metric-item">
+                        <div class="metric-item-label bump">BUMP</div>
+                        <div class="metric-value bump" id="band1Pos">0.00<span class="metric-unit">g</span></div>
                     </div>
-                    <div>
-                        <label style="font-size: 10px; color: var(--text-secondary);">HIGH</label>
-                        <input type="number" id="band1High" value="3.5" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    <div class="metric-item">
+                        <div class="metric-item-label rebound">REBOUND</div>
+                        <div class="metric-value rebound" id="band1Neg">0.00<span class="metric-unit">g</span></div>
                     </div>
                 </div>
-            </div>
-            <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
-                <div style="font-size: 11px; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">BAND 2 (Chop) - Hz</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <div>
-                        <label style="font-size: 10px; color: var(--text-secondary);">LOW</label>
-                        <input type="number" id="band2Low" value="3.5" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
-                    </div>
-                    <div>
-                        <label style="font-size: 10px; color: var(--text-secondary);">HIGH</label>
-                        <input type="number" id="band2High" value="9.0" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
-                    </div>
+                <div class="balance-bar">
+                    <div class="balance-fill" id="band1Bar" style="width: 50%"></div>
                 </div>
             </div>
-            <div style="margin-bottom: 12px;">
-                <div style="font-size: 11px; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">BAND 3 (Secondary) - Hz</div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                    <div>
-                        <label style="font-size: 10px; color: var(--text-secondary);">LOW</label>
-                        <input type="number" id="band3Low" value="9.0" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Chop</span>
+                    <span class="metric-band" id="band2Range">3.5-9 Hz</span>
+                </div>
+                <div class="metric-values">
+                    <div class="metric-item">
+                        <div class="metric-item-label bump">BUMP</div>
+                        <div class="metric-value bump" id="band2Pos">0.00<span class="metric-unit">g</span></div>
                     </div>
-                    <div>
-                        <label style="font-size: 10px; color: var(--text-secondary);">HIGH</label>
-                        <input type="number" id="band3High" value="15.0" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    <div class="metric-item">
+                        <div class="metric-item-label rebound">REBOUND</div>
+                        <div class="metric-value rebound" id="band2Neg">0.00<span class="metric-unit">g</span></div>
                     </div>
                 </div>
+                <div class="balance-bar">
+                    <div class="balance-fill" id="band2Bar" style="width: 50%"></div>
+                </div>
             </div>
-            <button class="btn primary" onclick="applyConfig()" style="width: 100%; margin-top: 8px;">APPLY CONFIGURATION</button>
+
+            <div class="metric-card">
+                <div class="metric-header">
+                    <span class="metric-label">Secondary</span>
+                    <span class="metric-band" id="band3Range">9-15 Hz</span>
+                </div>
+                <div class="metric-values">
+                    <div class="metric-item">
+                        <div class="metric-item-label bump">BUMP</div>
+                        <div class="metric-value bump" id="band3Pos">0.00<span class="metric-unit">g</span></div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-item-label rebound">REBOUND</div>
+                        <div class="metric-value rebound" id="band3Neg">0.00<span class="metric-unit">g</span></div>
+                    </div>
+                </div>
+                <div class="balance-bar">
+                    <div class="balance-fill" id="band3Bar" style="width: 50%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="total-energy">
+            <div class="total-energy-label">Total RMS Energy</div>
+            <div class="total-energy-value" id="totalRMS">0.000<span class="metric-unit" style="color: #ffffff;">g</span></div>
+        </div>
+
+        <div style="text-align: center; margin-top: 16px; font-size: 10px; color: var(--text-secondary);">
+            SAMPLE RATE: <span id="sampleRate">0</span> Hz
         </div>
     </div>
 
-    <div id="recordingTime" class="recording-time" style="display: none;">00:00</div>
+    <!-- PSD TAB -->
+    <div id="psd-tab" class="tab-content">
+        <div class="plot-container">
+            <div class="plot-header" id="psdHeader">
+                <strong>Title:</strong> <span id="psdTitle">No data loaded</span><br>
+                <strong>Start:</strong> <span id="psdStart">--</span><br>
+                <strong>Duration:</strong> <span id="psdDuration">--</span><br>
+                <strong>Sample Rate:</strong> <span id="psdSampleRate">--</span><br>
+                <strong>Units:</strong> m/s²<br>
+                <strong>Peak Raw:</strong> X(<span id="psdPeakX">--</span>) Y(<span id="psdPeakY">--</span>) Z(<span id="psdPeakZ">--</span>)<br>
+                <strong>ISD:</strong> X(<span id="psdISDX">--</span>) Y(<span id="psdISDY">--</span>) Z(<span id="psdISDZ">--</span>)<br>
+                <strong>Resonances X:</strong> <span id="psdResX">--</span><br>
+                <strong>Resonances Y:</strong> <span id="psdResY">--</span><br>
+                <strong>Resonances Z:</strong> <span id="psdResZ">--</span><br>
+                <strong>Avg Tilt:</strong> X(<span id="psdTiltX">--</span>) Y(<span id="psdTiltY">--</span>) Z(<span id="psdTiltZ">--</span>)<br>
+                <strong>RMS Vibration:</strong> X(<span id="psdRMSX">--</span>) Y(<span id="psdRMSY">--</span>) Z(<span id="psdRMSZ">--</span>)
+            </div>
+            <canvas id="psdCanvas"></canvas>
+            
+            <div class="axis-toggles">
+                <label class="axis-toggle x">
+                    <input type="checkbox" checked onchange="toggleAxis('x')"> X
+                </label>
+                <label class="axis-toggle y">
+                    <input type="checkbox" checked onchange="toggleAxis('y')"> Y
+                </label>
+                <label class="axis-toggle z">
+                    <input type="checkbox" checked onchange="toggleAxis('z')"> Z
+                </label>
+            </div>
+            
+            <div class="plot-controls">
+                <button class="btn" onclick="toggleYScale()">Y: <span id="yScaleLabel">LOG</span></button>
+                <button class="btn" onclick="setZoom(1)">SCALE: 1X</button>
+                <button class="btn" onclick="setZoom(2)">2X</button>
+                <button class="btn" onclick="setZoom(5)">5X</button>
+                <button class="btn" onclick="setZoom(10)">10X</button>
+                <button class="btn" onclick="scrollPlot(-1)">← SCROLL</button>
+                <button class="btn" onclick="scrollPlot(1)">SCROLL →</button>
+            </div>
+        </div>
+    </div>
 
-    <div class="metrics-grid">
+    <!-- TILT TAB -->
+    <div id="tilt-tab" class="tab-content">
+        <div class="plot-container">
+            <div class="plot-header" id="tiltHeader">
+                <strong>Tilt Analysis</strong> (Acceleration vs Time)
+            </div>
+            <canvas id="tiltCanvas"></canvas>
+            <div class="axis-toggles">
+                <label class="axis-toggle x">
+                    <input type="checkbox" checked onchange="updateTiltPlot()"> X
+                </label>
+                <label class="axis-toggle y">
+                    <input type="checkbox" checked onchange="updateTiltPlot()"> Y
+                </label>
+                <label class="axis-toggle z">
+                    <input type="checkbox" checked onchange="updateTiltPlot()"> Z
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIBRATION TAB -->
+    <div id="vibration-tab" class="tab-content">
+        <div class="plot-container">
+            <div class="plot-header" id="vibrationHeader">
+                <strong>Vibration Analysis</strong> (High-pass filtered, Acceleration vs Time)
+            </div>
+            <canvas id="vibrationCanvas"></canvas>
+            <div class="axis-toggles">
+                <label class="axis-toggle x">
+                    <input type="checkbox" checked onchange="updateVibrationPlot()"> X
+                </label>
+                <label class="axis-toggle y">
+                    <input type="checkbox" checked onchange="updateVibrationPlot()"> Y
+                </label>
+                <label class="axis-toggle z">
+                    <input type="checkbox" checked onchange="updateVibrationPlot()"> Z
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- RAW TAB -->
+    <div id="raw-tab" class="tab-content">
+        <div class="plot-container">
+            <div class="plot-header" id="rawHeader">
+                <strong>Raw Data</strong> (Acceleration vs Time)
+            </div>
+            <canvas id="rawCanvas"></canvas>
+            <div class="axis-toggles">
+                <label class="axis-toggle x">
+                    <input type="checkbox" checked onchange="updateRawPlot()"> X
+                </label>
+                <label class="axis-toggle y">
+                    <input type="checkbox" checked onchange="updateRawPlot()"> Y
+                </label>
+                <label class="axis-toggle z">
+                    <input type="checkbox" checked onchange="updateRawPlot()"> Z
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILES TAB -->
+    <div id="files-tab" class="tab-content">
         <div class="metric-card">
             <div class="metric-header">
-                <span class="metric-label">Primary</span>
-                <span class="metric-band">0.5-3.5 Hz</span>
+                <span class="metric-label">Saved Files</span>
             </div>
-            <div class="metric-values">
-                <div class="metric-item">
-                    <div class="metric-item-label">UPWARD</div>
-                    <div class="metric-value positive" id="band1Pos">0.00<span class="metric-unit">g</span></div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-item-label">DOWNWARD</div>
-                    <div class="metric-value negative" id="band1Neg">0.00<span class="metric-unit">g</span></div>
-                </div>
-            </div>
-            <div class="balance-bar">
-                <div class="balance-fill" id="band1Bar" style="width: 50%"></div>
+            <div class="file-list" id="fileList">
+                <p style="text-align: center; color: var(--text-secondary); padding: 20px;">No saved files</p>
             </div>
         </div>
+    </div>
 
+    <!-- CONFIG TAB -->
+    <div id="config-tab" class="tab-content">
         <div class="metric-card">
             <div class="metric-header">
-                <span class="metric-label">Chop</span>
-                <span class="metric-band">3.5-9 Hz</span>
+                <span class="metric-label">Configuration</span>
             </div>
-            <div class="metric-values">
-                <div class="metric-item">
-                    <div class="metric-item-label">UPWARD</div>
-                    <div class="metric-value positive" id="band2Pos">0.00<span class="metric-unit">g</span></div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-item-label">DOWNWARD</div>
-                    <div class="metric-value negative" id="band2Neg">0.00<span class="metric-unit">g</span></div>
-                </div>
+            
+            <div class="config-section">
+                <label>GRAVITY OFFSET (m/s²)</label>
+                <input type="number" id="gravityOffset" value="9.8" step="0.1">
             </div>
-            <div class="balance-bar">
-                <div class="balance-fill" id="band2Bar" style="width: 50%"></div>
+            
+            <div class="config-section">
+                <label>FILTER ORDER</label>
+                <input type="number" id="filterOrder" value="4" min="2" max="8" step="2">
             </div>
-        </div>
-
-        <div class="metric-card">
-            <div class="metric-header">
-                <span class="metric-label">Secondary</span>
-                <span class="metric-band">9-15 Hz</span>
-            </div>
-            <div class="metric-values">
-                <div class="metric-item">
-                    <div class="metric-item-label">UPWARD</div>
-                    <div class="metric-value positive" id="band3Pos">0.00<span class="metric-unit">g</span></div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-item-label">DOWNWARD</div>
-                    <div class="metric-value negative" id="band3Neg">0.00<span class="metric-unit">g</span></div>
+            
+            <div class="config-section">
+                <label>BAND 1 (PRIMARY) - Hz</label>
+                <div class="config-grid">
+                    <input type="number" id="band1Low" value="0.5" step="0.1" placeholder="Low">
+                    <input type="number" id="band1High" value="3.5" step="0.1" placeholder="High">
                 </div>
             </div>
-            <div class="balance-bar">
-                <div class="balance-fill" id="band3Bar" style="width: 50%"></div>
+            
+            <div class="config-section">
+                <label>BAND 2 (CHOP) - Hz</label>
+                <div class="config-grid">
+                    <input type="number" id="band2Low" value="3.5" step="0.1" placeholder="Low">
+                    <input type="number" id="band2High" value="9.0" step="0.1" placeholder="High">
+                </div>
             </div>
-        </div>
-    </div>
-
-    <div class="total-energy">
-        <div class="total-energy-label">Total RMS Energy</div>
-        <div class="total-energy-value" id="totalRMS">0.000<span class="metric-unit">g</span></div>
-    </div>
-
-    <div class="sample-rate">
-        SAMPLE RATE: <span id="sampleRate">0</span> Hz | ORIENTATION: Z-AXIS VERTICAL
-    </div>
-
-    <div class="metric-card" style="margin-top: 16px; background: rgba(239, 68, 68, 0.1); border-color: var(--accent-red);">
-        <div class="metric-header">
-            <span class="metric-label">DEBUG INFO</span>
-        </div>
-        <div style="font-size: 10px; color: var(--text-secondary); line-height: 1.6;">
-            <div style="color: var(--accent-yellow); margin-bottom: 8px;"><strong>⚠ WAKE SENSORS:</strong> Shake/tilt phone before starting!</div>
-            <div><strong>Sensor Support:</strong> <span id="debugSupport">Checking...</span></div>
-            <div><strong>Permission Status:</strong> <span id="debugPermission">Not requested</span></div>
-            <div><strong>Events Received:</strong> <span id="debugEvents">0</span></div>
-            <div><strong>Last Z Reading:</strong> <span id="debugZ">--</span></div>
-            <div><strong>Last Update:</strong> <span id="debugTime">--</span></div>
-            <div><strong>Error Log:</strong> <span id="debugError">None</span></div>
+            
+            <div class="config-section">
+                <label>BAND 3 (SECONDARY) - Hz</label>
+                <div class="config-grid">
+                    <input type="number" id="band3Low" value="9.0" step="0.1" placeholder="Low">
+                    <input type="number" id="band3High" value="15.0" step="0.1" placeholder="High">
+                </div>
+            </div>
+            
+            <button class="btn primary" onclick="applyConfig()">APPLY CONFIGURATION</button>
         </div>
     </div>
 
     <script>
+        // ========================================================================
+        // PROPRIETARY CODE - Multimatic / Michael Barber
+        // Not for external distribution or submission to AI sites
+        // ========================================================================
+
         // Global state
         let isRecording = false;
         let accelerometerData = [];
-        let sampleRate = 100; // Target 100 Hz
-        let lastTimestamp = 0;
-        let actualSampleRate = 0;
-        let sensorHandle = null;
         let startTime = 0;
         let recordingInterval = null;
-        let eventCount = 0;
-        let lastZValue = null;
+        let lastTimestamp = 0;
+        let actualSampleRate = 0;
+        let currentDataset = null;
+        let savedFiles = [];
 
-        // Configuration parameters
+        // Configuration
         let config = {
             gravityOffset: 9.8,
             filterOrder: 4,
@@ -480,148 +738,31 @@
             ]
         };
 
-        // Frequency bands configuration (will be updated from config)
         let bands = [...config.bands];
 
-        // Butterworth bandpass filter coefficients (2nd order)
-        function designButterworthBandpass(lowFreq, highFreq, sampleRate) {
-            const nyquist = sampleRate / 2;
-            const low = lowFreq / nyquist;
-            const high = highFreq / nyquist;
-            
-            // Simplified filter coefficients for real-time processing
-            return {
-                low: low,
-                high: high,
-                // Using simple moving average approximation for efficiency
-                taps: Math.max(3, Math.floor(sampleRate / ((lowFreq + highFreq) / 2)))
-            };
-        }
+        // Plot state
+        let plotState = {
+            yScale: 'log', // 'log' or 'linear'
+            zoom: 1,
+            scroll: 0,
+            visibleAxes: { x: true, y: true, z: true }
+        };
 
-        // Apply bandpass filter to data
-        // Butterworth bandpass filter using cascaded biquad sections
-        function bandpassFilter(data, lowFreq, highFreq, sampleRate) {
-            if (data.length < 10) return data;
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             
-            const order = config.filterOrder;
+            event.target.classList.add('active');
+            document.getElementById(tabName + '-tab').classList.add('active');
             
-            // High-pass stage (removes frequencies below lowFreq)
-            const alphaHP = Math.exp(-2 * Math.PI * lowFreq / sampleRate);
-            let highPassed = new Array(data.length);
-            highPassed[0] = data[0];
-            
-            for (let i = 1; i < data.length; i++) {
-                highPassed[i] = alphaHP * (highPassed[i-1] + data[i] - data[i-1]);
+            // Update plots when switching to plot tabs
+            if (currentDataset) {
+                if (tabName === 'psd') updatePSDPlot();
+                if (tabName === 'tilt') updateTiltPlot();
+                if (tabName === 'vibration') updateVibrationPlot();
+                if (tabName === 'raw') updateRawPlot();
             }
-            
-            // Apply high-pass multiple times for higher order
-            for (let pass = 1; pass < order / 2; pass++) {
-                for (let i = 1; i < highPassed.length; i++) {
-                    highPassed[i] = alphaHP * (highPassed[i-1] + highPassed[i] - highPassed[i-1]);
-                }
-            }
-            
-            // Low-pass stage (removes frequencies above highFreq)
-            const alphaLP = Math.exp(-2 * Math.PI * highFreq / sampleRate);
-            let bandPassed = new Array(highPassed.length);
-            bandPassed[0] = highPassed[0];
-            
-            for (let i = 1; i < highPassed.length; i++) {
-                bandPassed[i] = (1 - alphaLP) * highPassed[i] + alphaLP * bandPassed[i-1];
-            }
-            
-            // Apply low-pass multiple times for higher order
-            for (let pass = 1; pass < order / 2; pass++) {
-                for (let i = 1; i < bandPassed.length; i++) {
-                    bandPassed[i] = (1 - alphaLP) * bandPassed[i] + alphaLP * bandPassed[i-1];
-                }
-            }
-            
-            return bandPassed;
-        }
-
-        // Calculate RMS in time domain: filter first, then separate positive/negative, then compute RMS
-        function calculateRMSTimedom(filteredData) {
-            if (filteredData.length === 0) return { positive: 0, negative: 0, total: 0, rawPositive: [], rawNegative: [] };
-
-            // Separate positive and negative values from filtered signal
-            const positiveValues = [];
-            const negativeValues = [];
-            
-            for (let i = 0; i < filteredData.length; i++) {
-                if (filteredData[i] > 0) {
-                    positiveValues.push(filteredData[i]);
-                } else if (filteredData[i] < 0) {
-                    negativeValues.push(filteredData[i]);
-                }
-            }
-
-            // Calculate RMS for positive values (time domain)
-            const rmsPos = positiveValues.length > 0 ? 
-                Math.sqrt(positiveValues.reduce((sum, v) => sum + v * v, 0) / positiveValues.length) : 0;
-            
-            // Calculate RMS for negative values (time domain)
-            const rmsNeg = negativeValues.length > 0 ? 
-                Math.sqrt(negativeValues.reduce((sum, v) => sum + v * v, 0) / negativeValues.length) : 0;
-
-            // Calculate total RMS (time domain)
-            const rmsTotal = filteredData.length > 0 ? 
-                Math.sqrt(filteredData.reduce((sum, v) => sum + v * v, 0) / filteredData.length) : 0;
-
-            return {
-                positive: rmsPos,
-                negative: rmsNeg,
-                total: rmsTotal,
-                rawPositive: positiveValues,
-                rawNegative: negativeValues
-            };
-        }
-
-        // Update display
-        function updateDisplay() {
-            if (accelerometerData.length < 20) return; // Need minimum samples
-
-            // Extract Z-axis acceleration values (in m/s²)
-            const zData = accelerometerData.map(d => d.z);
-            
-            // Remove gravity component using tunable offset
-            const gravityOffsetValue = config.gravityOffset;
-            const zDataNoGravity = zData.map(v => v - gravityOffsetValue);
-
-            let totalRMS = 0;
-            let totalSamples = 0;
-
-            // Process each frequency band with new order of operations:
-            // 1. Filter the signal
-            // 2. Separate positive and negative from filtered signal
-            // 3. Calculate RMS for each in time domain
-            bands.forEach(band => {
-                const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMSTimedom(filtered);
-
-                // Update display
-                document.getElementById(`${band.name}Pos`).innerHTML = 
-                    `${rms.positive.toFixed(3)}<span class="metric-unit">g</span>`;
-                document.getElementById(`${band.name}Neg`).innerHTML = 
-                    `${rms.negative.toFixed(3)}<span class="metric-unit">g</span>`;
-
-                // Update balance bar
-                const total = rms.positive + rms.negative;
-                const percentage = total > 0 ? (rms.positive / total * 100) : 50;
-                document.getElementById(`${band.name}Bar`).style.width = `${percentage}%`;
-
-                // Accumulate for total RMS
-                totalRMS += rms.total * rms.total;
-                totalSamples++;
-            });
-
-            // Calculate and display total RMS
-            const overallRMS = Math.sqrt(totalRMS / totalSamples);
-            document.getElementById('totalRMS').innerHTML = 
-                `${overallRMS.toFixed(3)}<span class="metric-unit">g</span>`;
-
-            // Update sample count
-            document.getElementById('sampleCount').textContent = accelerometerData.length;
         }
 
         // Start/Stop recording
@@ -636,27 +777,19 @@
         // Start recording
         async function startRecording() {
             try {
-                document.getElementById('debugError').textContent = 'None';
-                document.getElementById('debugPermission').textContent = 'Requesting...';
-
-                // Request permission for device motion
+                // Request permission for iOS
                 if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                    document.getElementById('debugPermission').textContent = 'iOS - requesting permission...';
                     const permission = await DeviceMotionEvent.requestPermission();
-                    document.getElementById('debugPermission').textContent = `iOS - ${permission}`;
                     if (permission !== 'granted') {
                         alert('Permission to access motion sensors was denied.');
                         return;
                     }
-                } else {
-                    document.getElementById('debugPermission').textContent = 'Android - no permission needed';
                 }
 
                 isRecording = true;
                 accelerometerData = [];
                 lastTimestamp = 0;
                 startTime = Date.now();
-                eventCount = 0;
 
                 // Update UI
                 document.getElementById('startBtn').textContent = 'STOP MONITORING';
@@ -670,9 +803,8 @@
                 // Start recording timer
                 recordingInterval = setInterval(updateRecordingTime, 100);
 
-                // Start listening to accelerometer
-                window.addEventListener('devicemotion', handleMotion);
-                document.getElementById('debugPermission').textContent = 'Event listener added';
+                // Start listening - request high frequency
+                window.addEventListener('devicemotion', handleMotion, { passive: true });
 
                 // Estimate sample rate
                 setTimeout(() => {
@@ -681,13 +813,10 @@
                                         accelerometerData[0].time) / 1000;
                         actualSampleRate = accelerometerData.length / duration;
                         document.getElementById('sampleRate').textContent = Math.round(actualSampleRate);
-                    } else {
-                        document.getElementById('debugError').textContent = `Only ${accelerometerData.length} samples after 2s`;
                     }
                 }, 2000);
 
             } catch (error) {
-                document.getElementById('debugError').textContent = error.message;
                 alert('Error accessing accelerometer: ' + error.message);
                 isRecording = false;
             }
@@ -707,38 +836,25 @@
             document.getElementById('statusDot').classList.remove('active');
             document.getElementById('statusText').textContent = 'STANDBY';
             document.getElementById('recordingTime').style.display = 'none';
+
+            // Process data into current dataset
+            if (accelerometerData.length > 0) {
+                processDataset();
+            }
         }
 
         // Handle motion event
         function handleMotion(event) {
-            eventCount++;
-            document.getElementById('debugEvents').textContent = eventCount;
-            
             if (!isRecording) return;
 
-            // Try multiple acceleration sources
-            let acc = event.accelerationIncludingGravity;
-            
-            // Debug: Check what data is available
-            if (!acc || acc.z === null) {
-                acc = event.acceleration;
-                if (acc && acc.z !== null) {
-                    document.getElementById('debugError').textContent = 'Using acceleration (no gravity)';
-                } else {
-                    document.getElementById('debugError').textContent = 'No acceleration data available';
-                    return;
-                }
-            }
-
-            if (acc && acc.z !== null) {
+            const acc = event.accelerationIncludingGravity;
+            if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
                 const now = Date.now();
-                lastZValue = acc.z;
-                
-                document.getElementById('debugZ').textContent = acc.z.toFixed(3) + ' m/s²';
-                document.getElementById('debugTime').textContent = new Date().toLocaleTimeString();
                 
                 accelerometerData.push({
                     time: now,
+                    x: acc.x,
+                    y: acc.y,
                     z: acc.z
                 });
 
@@ -747,12 +863,10 @@
                     lastTimestamp = now;
                     updateDisplay();
                 }
-            } else {
-                document.getElementById('debugError').textContent = 'acc.z is null';
             }
         }
 
-        // Update recording time display
+        // Update recording time
         function updateRecordingTime() {
             const elapsed = Math.floor((Date.now() - startTime) / 1000);
             const minutes = Math.floor(elapsed / 60);
@@ -761,79 +875,876 @@
                 `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         }
 
-        // Reset metrics
-        function resetMetrics() {
-            accelerometerData = [];
+        // Butterworth bandpass filter
+        function bandpassFilter(data, lowFreq, highFreq, sampleRate) {
+            if (data.length < 10) return data;
             
-            // Reset all displays
-            ['band1', 'band2', 'band3'].forEach(band => {
-                document.getElementById(`${band}Pos`).innerHTML = '0.00<span class="metric-unit">g</span>';
-                document.getElementById(`${band}Neg`).innerHTML = '0.00<span class="metric-unit">g</span>';
-                document.getElementById(`${band}Bar`).style.width = '50%';
-            });
+            const order = config.filterOrder;
             
-            document.getElementById('totalRMS').innerHTML = '0.000<span class="metric-unit">g</span>';
-            document.getElementById('sampleCount').textContent = '0';
-            document.getElementById('saveBtn').disabled = true;
+            // High-pass stage
+            const alphaHP = Math.exp(-2 * Math.PI * lowFreq / sampleRate);
+            let highPassed = new Array(data.length);
+            highPassed[0] = data[0];
+            
+            for (let i = 1; i < data.length; i++) {
+                highPassed[i] = alphaHP * (highPassed[i-1] + data[i] - data[i-1]);
+            }
+            
+            for (let pass = 1; pass < order / 2; pass++) {
+                for (let i = 1; i < highPassed.length; i++) {
+                    highPassed[i] = alphaHP * (highPassed[i-1] + highPassed[i] - highPassed[i-1]);
+                }
+            }
+            
+            // Low-pass stage
+            const alphaLP = Math.exp(-2 * Math.PI * highFreq / sampleRate);
+            let bandPassed = new Array(highPassed.length);
+            bandPassed[0] = highPassed[0];
+            
+            for (let i = 1; i < highPassed.length; i++) {
+                bandPassed[i] = (1 - alphaLP) * highPassed[i] + alphaLP * bandPassed[i-1];
+            }
+            
+            for (let pass = 1; pass < order / 2; pass++) {
+                for (let i = 1; i < bandPassed.length; i++) {
+                    bandPassed[i] = (1 - alphaLP) * bandPassed[i] + alphaLP * bandPassed[i-1];
+                }
+            }
+            
+            return bandPassed;
         }
 
-        // Save results
-        function saveResults() {
-            if (accelerometerData.length === 0) {
-                alert('No data to save!');
-                return;
+        // Calculate RMS in time domain
+        function calculateRMSTimedom(filteredData) {
+            if (filteredData.length === 0) return { positive: 0, negative: 0, total: 0 };
+
+            const positiveValues = [];
+            const negativeValues = [];
+            
+            for (let i = 0; i < filteredData.length; i++) {
+                if (filteredData[i] > 0) {
+                    positiveValues.push(filteredData[i]);
+                } else if (filteredData[i] < 0) {
+                    negativeValues.push(filteredData[i]);
+                }
             }
 
-            // Prompt for filename
-            const defaultName = 'vehicle-test-' + new Date().toISOString().slice(0,19).replace(/:/g,'-');
-            const filename = prompt('Enter filename:', defaultName);
+            const rmsPos = positiveValues.length > 0 ? 
+                Math.sqrt(positiveValues.reduce((sum, v) => sum + v * v, 0) / positiveValues.length) : 0;
             
-            if (!filename) return; // User cancelled
+            const rmsNeg = negativeValues.length > 0 ? 
+                Math.sqrt(negativeValues.reduce((sum, v) => sum + v * v, 0) / negativeValues.length) : 0;
 
-            // Calculate final results
+            const rmsTotal = filteredData.length > 0 ? 
+                Math.sqrt(filteredData.reduce((sum, v) => sum + v * v, 0) / filteredData.length) : 0;
+
+            return { positive: rmsPos, negative: rmsNeg, total: rmsTotal };
+        }
+
+        // Update real-time display
+        function updateDisplay() {
+            if (accelerometerData.length < 20) return;
+
             const zData = accelerometerData.map(d => d.z);
             const gravityOffsetValue = config.gravityOffset;
             const zDataNoGravity = zData.map(v => v - gravityOffsetValue);
 
+            let totalRMS = 0;
+            let totalSamples = 0;
+
+            bands.forEach(band => {
+                const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
+                const rms = calculateRMSTimedom(filtered);
+
+                document.getElementById(`${band.name}Pos`).innerHTML = 
+                    `${rms.positive.toFixed(3)}<span class="metric-unit">g</span>`;
+                document.getElementById(`${band.name}Neg`).innerHTML = 
+                    `${rms.negative.toFixed(3)}<span class="metric-unit">g</span>`;
+
+                const total = rms.positive + rms.negative;
+                const percentage = total > 0 ? (rms.positive / total * 100) : 50;
+                document.getElementById(`${band.name}Bar`).style.width = `${percentage}%`;
+
+                totalRMS += rms.total * rms.total;
+                totalSamples++;
+            });
+
+            const overallRMS = Math.sqrt(totalRMS / totalSamples);
+            document.getElementById('totalRMS').innerHTML = 
+                `${overallRMS.toFixed(3)}<span class="metric-unit" style="color: #ffffff;">g</span>`;
+
+            document.getElementById('sampleCount').textContent = accelerometerData.length;
+        }
+
+        // FFT calculation (Cooley-Tukey algorithm)
+        function fft(real, imag) {
+            const n = real.length;
+            if (n <= 1) return { real, imag };
+
+            // Bit-reversal permutation
+            const j = new Array(n);
+            j[0] = 0;
+            let m = n >> 1;
+            for (let i = 1; i < n; i++) {
+                let k = m;
+                while (j[i - 1] >= k) {
+                    k >>= 1;
+                }
+                j[i] = j[i - 1] + k - (j[i - 1] & k ? k << 1 : 0);
+            }
+
+            const realOut = new Array(n);
+            const imagOut = new Array(n);
+            for (let i = 0; i < n; i++) {
+                realOut[i] = real[j[i]];
+                imagOut[i] = imag[j[i]];
+            }
+
+            // Cooley-Tukey decimation-in-time FFT
+            for (let size = 2; size <= n; size <<= 1) {
+                const halfSize = size >> 1;
+                const angle = -2 * Math.PI / size;
+                
+                for (let i = 0; i < n; i += size) {
+                    for (let k = 0; k < halfSize; k++) {
+                        const tReal = Math.cos(angle * k);
+                        const tImag = Math.sin(angle * k);
+                        
+                        const evenIdx = i + k;
+                        const oddIdx = i + k + halfSize;
+                        
+                        const tempReal = tReal * realOut[oddIdx] - tImag * imagOut[oddIdx];
+                        const tempImag = tReal * imagOut[oddIdx] + tImag * realOut[oddIdx];
+                        
+                        realOut[oddIdx] = realOut[evenIdx] - tempReal;
+                        imagOut[oddIdx] = imagOut[evenIdx] - tempImag;
+                        realOut[evenIdx] += tempReal;
+                        imagOut[evenIdx] += tempImag;
+                    }
+                }
+            }
+
+            return { real: realOut, imag: imagOut };
+        }
+
+        // Calculate PSD
+        function calculatePSD(data, sampleRate) {
+            // Pad to next power of 2
+            let n = 1;
+            while (n < data.length) n <<= 1;
+            
+            const real = new Array(n).fill(0);
+            const imag = new Array(n).fill(0);
+            
+            // Copy data and apply Hanning window
+            for (let i = 0; i < data.length; i++) {
+                const window = 0.5 * (1 - Math.cos(2 * Math.PI * i / (data.length - 1)));
+                real[i] = data[i] * window;
+            }
+            
+            // Perform FFT
+            const result = fft(real, imag);
+            
+            // Calculate power spectrum
+            const psd = [];
+            const freqs = [];
+            const nyquist = sampleRate / 2;
+            const df = sampleRate / n;
+            
+            for (let i = 0; i < n / 2; i++) {
+                const freq = i * df;
+                if (freq <= 55) {  // Only up to 55Hz
+                    const power = (result.real[i] ** 2 + result.imag[i] ** 2) / n;
+                    psd.push(power / sampleRate); // PSD in (m/s²)²/Hz
+                    freqs.push(freq);
+                }
+            }
+            
+            return { psd, freqs };
+        }
+
+        // Find resonance peaks
+        function findResonances(psd, freqs, count = 2) {
+            const peaks = [];
+            
+            for (let i = 1; i < psd.length - 1; i++) {
+                if (psd[i] > psd[i-1] && psd[i] > psd[i+1]) {
+                    peaks.push({ freq: freqs[i], power: psd[i] });
+                }
+            }
+            
+            peaks.sort((a, b) => b.power - a.power);
+            return peaks.slice(0, count);
+        }
+
+        // Process dataset for analysis
+        function processDataset() {
+            if (accelerometerData.length === 0) return;
+
             const duration = (accelerometerData[accelerometerData.length - 1].time - 
                             accelerometerData[0].time) / 1000;
 
-            // Compile results
-            let results = {
-                filename: filename,
-                timestamp: new Date().toISOString(),
-                duration_seconds: duration.toFixed(2),
-                sample_count: accelerometerData.length,
-                sample_rate_hz: (accelerometerData.length / duration).toFixed(1),
-                gravity_offset_ms2: gravityOffsetValue.toFixed(2),
-                filter_order: config.filterOrder,
-                bands: {}
+            currentDataset = {
+                title: 'Session ' + new Date().toISOString(),
+                startTime: new Date(startTime).toISOString(),
+                duration: duration,
+                sampleRate: actualSampleRate,
+                data: accelerometerData.map(d => ({...d})),
+                config: {...config}
             };
 
-            // Process each band
-            bands.forEach(band => {
-                const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMSTimedom(filtered);
+            // Calculate statistics
+            calculateStatistics();
+            updatePSDPlot();
+        }
+
+        // Calculate all statistics
+        function calculateStatistics() {
+            if (!currentDataset) return;
+
+            const data = currentDataset.data;
+            
+            // Extract axes
+            const xData = data.map(d => d.x);
+            const yData = data.map(d => d.y);
+            const zData = data.map(d => d.z);
+            
+            // Peak raw values
+            currentDataset.peakX = Math.max(...xData.map(Math.abs));
+            currentDataset.peakY = Math.max(...yData.map(Math.abs));
+            currentDataset.peakZ = Math.max(...zData.map(Math.abs));
+            
+            // Average tilt (mean of raw including gravity)
+            currentDataset.tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
+            currentDataset.tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
+            currentDataset.tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
+            
+            // RMS vibration (after removing mean)
+            const calcRMS = (data) => {
+                const mean = data.reduce((a,b) => a+b, 0) / data.length;
+                const deviations = data.map(v => v - mean);
+                return Math.sqrt(deviations.reduce((sum, v) => sum + v*v, 0) / data.length);
+            };
+            
+            currentDataset.rmsX = calcRMS(xData);
+            currentDataset.rmsY = calcRMS(yData);
+            currentDataset.rmsZ = calcRMS(zData);
+            
+            // Calculate PSDs
+            const xPSD = calculatePSD(xData.map(v => v - currentDataset.tiltX), currentDataset.sampleRate);
+            const yPSD = calculatePSD(yData.map(v => v - currentDataset.tiltY), currentDataset.sampleRate);
+            const zPSD = calculatePSD(zData.map(v => v - currentDataset.tiltZ), currentDataset.sampleRate);
+            
+            currentDataset.psd = {
+                x: xPSD,
+                y: yPSD,
+                z: zPSD
+            };
+            
+            // Find resonances
+            currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
+            currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
+            currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
+            
+            // Calculate ISD (Integrated Spectral Density - total energy)
+            currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
+            currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
+            currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
+        }
+
+        // Update PSD plot
+        function updatePSDPlot() {
+            if (!currentDataset || !currentDataset.psd) return;
+
+            // Update header info
+            document.getElementById('psdTitle').textContent = currentDataset.title;
+            document.getElementById('psdStart').textContent = new Date(currentDataset.startTime).toLocaleString();
+            document.getElementById('psdDuration').textContent = currentDataset.duration.toFixed(2) + ' sec';
+            document.getElementById('psdSampleRate').textContent = currentDataset.sampleRate.toFixed(1) + ' Hz';
+            
+            document.getElementById('psdPeakX').textContent = currentDataset.peakX.toFixed(2);
+            document.getElementById('psdPeakY').textContent = currentDataset.peakY.toFixed(2);
+            document.getElementById('psdPeakZ').textContent = currentDataset.peakZ.toFixed(2);
+            
+            document.getElementById('psdISDX').textContent = currentDataset.isdX.toFixed(2);
+            document.getElementById('psdISDY').textContent = currentDataset.isdY.toFixed(2);
+            document.getElementById('psdISDZ').textContent = currentDataset.isdZ.toFixed(2);
+            
+            const formatRes = (res) => res.map(r => `${r.freq.toFixed(1)} Hz (${r.power.toFixed(2)})`).join(', ');
+            document.getElementById('psdResX').textContent = formatRes(currentDataset.resonancesX);
+            document.getElementById('psdResY').textContent = formatRes(currentDataset.resonancesY);
+            document.getElementById('psdResZ').textContent = formatRes(currentDataset.resonancesZ);
+            
+            document.getElementById('psdTiltX').textContent = currentDataset.tiltX.toFixed(2);
+            document.getElementById('psdTiltY').textContent = currentDataset.tiltY.toFixed(2);
+            document.getElementById('psdTiltZ').textContent = currentDataset.tiltZ.toFixed(2);
+            
+            document.getElementById('psdRMSX').textContent = currentDataset.rmsX.toFixed(3);
+            document.getElementById('psdRMSY').textContent = currentDataset.rmsY.toFixed(3);
+            document.getElementById('psdRMSZ').textContent = currentDataset.rmsZ.toFixed(3);
+
+            // Draw plot
+            drawPSDPlot();
+        }
+
+        // Draw PSD plot on canvas
+        function drawPSDPlot() {
+            const canvas = document.getElementById('psdCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            // Clear
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+            
+            // Margins
+            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const plotW = w - margin.left - margin.right;
+            const plotH = h - margin.top - margin.bottom;
+            
+            // Get data
+            const freqs = currentDataset.psd.x.freqs;
+            const maxFreq = Math.min(55, freqs[freqs.length - 1]);
+            
+            // Apply zoom and scroll
+            const zoomedMaxFreq = maxFreq / plotState.zoom;
+            const scrollOffset = plotState.scroll * zoomedMaxFreq * 0.1;
+            const visibleMinFreq = Math.max(0, scrollOffset);
+            const visibleMaxFreq = Math.min(maxFreq, visibleMinFreq + zoomedMaxFreq);
+            
+            // Find max power for scaling
+            let maxPower = 0;
+            ['x', 'y', 'z'].forEach(axis => {
+                if (plotState.visibleAxes[axis]) {
+                    currentDataset.psd[axis].psd.forEach((p, i) => {
+                        if (freqs[i] >= visibleMinFreq && freqs[i] <= visibleMaxFreq) {
+                            maxPower = Math.max(maxPower, p);
+                        }
+                    });
+                }
+            });
+            
+            // Y-scale function
+            const yScale = (value) => {
+                if (plotState.yScale === 'log') {
+                    const logMin = -2; // 10^-2 = 0.01
+                    const logMax = Math.log10(maxPower) + 0.5;
+                    const logValue = Math.log10(Math.max(value, 1e-10));
+                    return margin.top + plotH * (1 - (logValue - logMin) / (logMax - logMin));
+                } else {
+                    return margin.top + plotH * (1 - value / maxPower);
+                }
+            };
+            
+            // X-scale function
+            const xScale = (freq) => {
+                return margin.left + plotW * (freq - visibleMinFreq) / (visibleMaxFreq - visibleMinFreq);
+            };
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            
+            // Vertical grid lines
+            const freqStep = plotState.zoom >= 5 ? 1 : (plotState.zoom >= 2 ? 5 : 10);
+            for (let f = Math.ceil(visibleMinFreq / freqStep) * freqStep; f <= visibleMaxFreq; f += freqStep) {
+                const x = xScale(f);
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + plotH);
+                ctx.stroke();
+            }
+            
+            // Horizontal grid lines
+            if (plotState.yScale === 'log') {
+                for (let logPower = -2; logPower <= Math.log10(maxPower) + 1; logPower++) {
+                    const y = yScale(Math.pow(10, logPower));
+                    if (y >= margin.top && y <= margin.top + plotH) {
+                        ctx.beginPath();
+                        ctx.moveTo(margin.left, y);
+                        ctx.lineTo(margin.left + plotW, y);
+                        ctx.stroke();
+                    }
+                }
+            } else {
+                for (let i = 0; i <= 5; i++) {
+                    const y = margin.top + (plotH * i / 5);
+                    ctx.beginPath();
+                    ctx.moveTo(margin.left, y);
+                    ctx.lineTo(margin.left + plotW, y);
+                    ctx.stroke();
+                }
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + plotH);
+            ctx.lineTo(margin.left + plotW, margin.top + plotH);
+            ctx.stroke();
+            
+            // Draw data
+            const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
+            
+            ['x', 'y', 'z'].forEach(axis => {
+                if (!plotState.visibleAxes[axis]) return;
                 
-                results.bands[`${band.low}-${band.high}Hz`] = {
-                    upward_rms_g: rms.positive.toFixed(4),
-                    downward_rms_g: rms.negative.toFixed(4),
-                    total_rms_g: rms.total.toFixed(4),
-                    balance_percent: ((rms.positive / (rms.positive + rms.negative) * 100) || 50).toFixed(1)
-                };
+                ctx.strokeStyle = colors[axis];
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                let first = true;
+                currentDataset.psd[axis].psd.forEach((p, i) => {
+                    const f = freqs[i];
+                    if (f >= visibleMinFreq && f <= visibleMaxFreq) {
+                        const x = xScale(f);
+                        const y = yScale(p);
+                        
+                        if (first) {
+                            ctx.moveTo(x, y);
+                            first = false;
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    }
+                });
+                
+                ctx.stroke();
             });
+            
+            // Draw labels
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            
+            // X-axis label
+            ctx.fillText('Frequency (Hz)', margin.left + plotW / 2, h - 10);
+            
+            // X-axis tick labels
+            for (let f = Math.ceil(visibleMinFreq / freqStep) * freqStep; f <= visibleMaxFreq; f += freqStep) {
+                const x = xScale(f);
+                ctx.fillText(f.toString(), x, margin.top + plotH + 20);
+            }
+            
+            // Y-axis label
+            ctx.save();
+            ctx.translate(15, margin.top + plotH / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('PSD (m²/s³)', 0, 0);
+            ctx.restore();
+            
+            // Y-axis tick labels
+            ctx.textAlign = 'right';
+            if (plotState.yScale === 'log') {
+                for (let logPower = -2; logPower <= Math.log10(maxPower) + 1; logPower++) {
+                    const y = yScale(Math.pow(10, logPower));
+                    if (y >= margin.top && y <= margin.top + plotH) {
+                        ctx.fillText(`1e${logPower}`, margin.left - 10, y + 4);
+                    }
+                }
+            } else {
+                for (let i = 0; i <= 5; i++) {
+                    const value = maxPower * (1 - i / 5);
+                    const y = margin.top + (plotH * i / 5);
+                    ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
+                }
+            }
+        }
 
-            // Calculate overall RMS
-            let totalRMS = 0;
-            bands.forEach(band => {
-                const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMSTimedom(filtered);
-                totalRMS += rms.total * rms.total;
+        // Plot control functions
+        function toggleYScale() {
+            plotState.yScale = plotState.yScale === 'log' ? 'linear' : 'log';
+            document.getElementById('yScaleLabel').textContent = plotState.yScale.toUpperCase();
+            if (currentDataset) drawPSDPlot();
+        }
+
+        function setZoom(level) {
+            plotState.zoom = level;
+            plotState.scroll = 0;
+            if (currentDataset) drawPSDPlot();
+        }
+
+        function scrollPlot(direction) {
+            plotState.scroll += direction;
+            if (currentDataset) drawPSDPlot();
+        }
+
+        function toggleAxis(axis) {
+            plotState.visibleAxes[axis] = event.target.checked;
+            if (currentDataset) drawPSDPlot();
+        }
+
+        // Update Tilt plot (raw acceleration including gravity vs time)
+        function updateTiltPlot() {
+            if (!currentDataset) return;
+
+            const canvas = document.getElementById('tiltCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+            
+            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const plotW = w - margin.left - margin.right;
+            const plotH = h - margin.top - margin.bottom;
+            
+            const data = currentDataset.data;
+            const times = data.map((d, i) => i / currentDataset.sampleRate);
+            const maxTime = times[times.length - 1];
+            
+            // Find max/min for scaling
+            let maxAcc = -Infinity, minAcc = Infinity;
+            ['x', 'y', 'z'].forEach(axis => {
+                const axisCheckbox = document.querySelector(`#tilt-tab .axis-toggle.${axis} input`);
+                if (axisCheckbox && axisCheckbox.checked) {
+                    data.forEach(d => {
+                        maxAcc = Math.max(maxAcc, d[axis]);
+                        minAcc = Math.min(minAcc, d[axis]);
+                    });
+                }
             });
-            results.overall_rms_g = Math.sqrt(totalRMS / bands.length).toFixed(4);
+            
+            const accRange = maxAcc - minAcc;
+            
+            // Scale functions
+            const xScale = (time) => margin.left + (time / maxTime) * plotW;
+            const yScale = (acc) => margin.top + plotH * (1 - (acc - minAcc) / accRange);
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) {
+                const y = margin.top + (plotH * i / 5);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + plotH);
+            ctx.lineTo(margin.left + plotW, margin.top + plotH);
+            ctx.stroke();
+            
+            // Draw data
+            const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
+            
+            ['x', 'y', 'z'].forEach(axis => {
+                const axisCheckbox = document.querySelector(`#tilt-tab .axis-toggle.${axis} input`);
+                if (!axisCheckbox || !axisCheckbox.checked) return;
+                
+                ctx.strokeStyle = colors[axis];
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                data.forEach((d, i) => {
+                    const x = xScale(times[i]);
+                    const y = yScale(d[axis]);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                ctx.stroke();
+            });
+            
+            // Labels
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Time (s)', margin.left + plotW / 2, h - 10);
+            
+            ctx.save();
+            ctx.translate(15, margin.top + plotH / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Acceleration (m/s²)', 0, 0);
+            ctx.restore();
+            
+            // Y-axis ticks
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= 5; i++) {
+                const value = maxAcc - (accRange * i / 5);
+                const y = margin.top + (plotH * i / 5);
+                ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
+            }
+            
+            // X-axis ticks
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 5; i++) {
+                const time = (maxTime * i / 5);
+                const x = margin.left + (plotW * i / 5);
+                ctx.fillText(time.toFixed(1), x, margin.top + plotH + 20);
+            }
+        }
 
-            // Create downloadable file
-            const jsonStr = JSON.stringify(results, null, 2);
+        // Update Vibration plot (high-pass filtered data vs time)
+        function updateVibrationPlot() {
+            if (!currentDataset) return;
+
+            const canvas = document.getElementById('vibrationCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+            
+            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const plotW = w - margin.left - margin.right;
+            const plotH = h - margin.top - margin.bottom;
+            
+            const data = currentDataset.data;
+            const times = data.map((d, i) => i / currentDataset.sampleRate);
+            const maxTime = times[times.length - 1];
+            
+            // Apply high-pass filter to remove DC (gravity) component
+            const highPassCutoff = 0.5; // Hz
+            const filteredData = {};
+            
+            ['x', 'y', 'z'].forEach(axis => {
+                const rawData = data.map(d => d[axis]);
+                filteredData[axis] = bandpassFilter(rawData, highPassCutoff, 55, currentDataset.sampleRate);
+            });
+            
+            // Find max/min for scaling
+            let maxAcc = -Infinity, minAcc = Infinity;
+            ['x', 'y', 'z'].forEach(axis => {
+                const axisCheckbox = document.querySelector(`#vibration-tab .axis-toggle.${axis} input`);
+                if (axisCheckbox && axisCheckbox.checked) {
+                    filteredData[axis].forEach(v => {
+                        maxAcc = Math.max(maxAcc, v);
+                        minAcc = Math.min(minAcc, v);
+                    });
+                }
+            });
+            
+            const accRange = Math.max(Math.abs(maxAcc), Math.abs(minAcc)) * 2;
+            const centerAcc = 0;
+            
+            // Scale functions
+            const xScale = (time) => margin.left + (time / maxTime) * plotW;
+            const yScale = (acc) => margin.top + plotH / 2 - (acc / accRange) * plotH;
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) {
+                const y = margin.top + (plotH * i / 5);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + plotH);
+            ctx.lineTo(margin.left + plotW, margin.top + plotH);
+            ctx.stroke();
+            
+            // Draw zero line
+            ctx.strokeStyle = '#666';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(margin.left, yScale(0));
+            ctx.lineTo(margin.left + plotW, yScale(0));
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw data
+            const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
+            
+            ['x', 'y', 'z'].forEach(axis => {
+                const axisCheckbox = document.querySelector(`#vibration-tab .axis-toggle.${axis} input`);
+                if (!axisCheckbox || !axisCheckbox.checked) return;
+                
+                ctx.strokeStyle = colors[axis];
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                
+                filteredData[axis].forEach((v, i) => {
+                    const x = xScale(times[i]);
+                    const y = yScale(v);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                });
+                
+                ctx.stroke();
+            });
+            
+            // Labels
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Time (s)', margin.left + plotW / 2, h - 10);
+            
+            ctx.save();
+            ctx.translate(15, margin.top + plotH / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Acceleration (m/s²)', 0, 0);
+            ctx.restore();
+        }
+
+        // Update Raw plot (completely unfiltered data vs time)
+        function updateRawPlot() {
+            if (!currentDataset) return;
+
+            const canvas = document.getElementById('rawCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            
+            const w = canvas.width;
+            const h = canvas.height;
+            
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, w, h);
+            
+            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const plotW = w - margin.left - margin.right;
+            const plotH = h - margin.top - margin.bottom;
+            
+            const data = currentDataset.data;
+            const times = data.map((d, i) => i / currentDataset.sampleRate);
+            const maxTime = times[times.length - 1];
+            
+            // Find max/min for scaling (raw data)
+            let maxAcc = -Infinity, minAcc = Infinity;
+            ['x', 'y', 'z'].forEach(axis => {
+                const axisCheckbox = document.querySelector(`#raw-tab .axis-toggle.${axis} input`);
+                if (axisCheckbox && axisCheckbox.checked) {
+                    data.forEach(d => {
+                        maxAcc = Math.max(maxAcc, d[axis]);
+                        minAcc = Math.min(minAcc, d[axis]);
+                    });
+                }
+            });
+            
+            const accRange = maxAcc - minAcc;
+            
+            // Scale functions
+            const xScale = (time) => margin.left + (time / maxTime) * plotW;
+            const yScale = (acc) => margin.top + plotH * (1 - (acc - minAcc) / accRange);
+            
+            // Draw grid
+            ctx.strokeStyle = '#e0e0e0';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 5; i++) {
+                const y = margin.top + (plotH * i / 5);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
+            }
+            
+            // Draw axes
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(margin.left, margin.top);
+            ctx.lineTo(margin.left, margin.top + plotH);
+            ctx.lineTo(margin.left + plotW, margin.top + plotH);
+            ctx.stroke();
+            
+            // Draw data
+            const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
+            
+            ['x', 'y', 'z'].forEach(axis => {
+                const axisCheckbox = document.querySelector(`#raw-tab .axis-toggle.${axis} input`);
+                if (!axisCheckbox || !axisCheckbox.checked) return;
+                
+                ctx.strokeStyle = colors[axis];
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                
+                // Downsample for performance if needed
+                const step = Math.max(1, Math.floor(data.length / 5000));
+                
+                for (let i = 0; i < data.length; i += step) {
+                    const x = xScale(times[i]);
+                    const y = yScale(data[i][axis]);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                
+                ctx.stroke();
+            });
+            
+            // Labels
+            ctx.fillStyle = 'black';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('Time (s)', margin.left + plotW / 2, h - 10);
+            
+            ctx.save();
+            ctx.translate(15, margin.top + plotH / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillText('Acceleration (m/s²)', 0, 0);
+            ctx.restore();
+            
+            // Y-axis ticks
+            ctx.textAlign = 'right';
+            for (let i = 0; i <= 5; i++) {
+                const value = maxAcc - (accRange * i / 5);
+                const y = margin.top + (plotH * i / 5);
+                ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
+            }
+            
+            // X-axis ticks
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 5; i++) {
+                const time = (maxTime * i / 5);
+                const x = margin.left + (plotW * i / 5);
+                ctx.fillText(time.toFixed(1), x, margin.top + plotH + 20);
+            }
+        }
+
+        // Save results
+        function saveResults() {
+            if (!currentDataset) {
+                alert('No data to save!');
+                return;
+            }
+
+            const defaultName = 'barber-mate-' + new Date().toISOString().slice(0,19).replace(/:/g,'-');
+            const filename = prompt('Enter filename:', defaultName);
+            
+            if (!filename) return;
+
+            currentDataset.filename = filename;
+            
+            // Save to localStorage
+            savedFiles.push({...currentDataset});
+            localStorage.setItem('barberMateFiles', JSON.stringify(savedFiles));
+            
+            // Also download as JSON
+            const jsonStr = JSON.stringify(currentDataset, null, 2);
             const blob = new Blob([jsonStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -845,21 +1756,116 @@
             URL.revokeObjectURL(url);
 
             alert('Results saved as ' + filename + '.json');
+            updateFileList();
         }
 
-        // Toggle configuration panel
-        function toggleConfig() {
-            const panel = document.getElementById('configPanel');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        // Update file list display
+        function updateFileList() {
+            const stored = localStorage.getItem('barberMateFiles');
+            if (stored) {
+                savedFiles = JSON.parse(stored);
+            }
+            
+            const fileListEl = document.getElementById('fileList');
+            
+            if (savedFiles.length === 0) {
+                fileListEl.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 20px;">No saved files</p>';
+                return;
+            }
+            
+            fileListEl.innerHTML = '';
+            
+            savedFiles.forEach((file, index) => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                
+                const fileName = document.createElement('div');
+                fileName.className = 'file-name';
+                fileName.textContent = file.filename || file.title;
+                
+                const actions = document.createElement('div');
+                actions.className = 'file-actions';
+                
+                const loadBtn = document.createElement('button');
+                loadBtn.className = 'btn';
+                loadBtn.textContent = 'LOAD';
+                loadBtn.onclick = () => loadFile(index);
+                
+                const renameBtn = document.createElement('button');
+                renameBtn.className = 'btn';
+                renameBtn.textContent = 'RENAME';
+                renameBtn.onclick = () => renameFile(index);
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'btn';
+                deleteBtn.textContent = 'DELETE';
+                deleteBtn.style.color = 'var(--accent-red)';
+                deleteBtn.onclick = () => deleteFile(index);
+                
+                actions.appendChild(loadBtn);
+                actions.appendChild(renameBtn);
+                actions.appendChild(deleteBtn);
+                
+                fileItem.appendChild(fileName);
+                fileItem.appendChild(actions);
+                
+                fileListEl.appendChild(fileItem);
+            });
+        }
+
+        // Load file from saved files
+        function loadFile(index) {
+            currentDataset = {...savedFiles[index]};
+            calculateStatistics();
+            alert('File loaded: ' + currentDataset.filename);
+            switchTab('psd');
+        }
+
+        // Rename file
+        function renameFile(index) {
+            const newName = prompt('Enter new filename:', savedFiles[index].filename);
+            if (newName && newName.trim()) {
+                savedFiles[index].filename = newName.trim();
+                localStorage.setItem('barberMateFiles', JSON.stringify(savedFiles));
+                updateFileList();
+                
+                // Update current dataset if it's the one we renamed
+                if (currentDataset && currentDataset.filename === savedFiles[index].filename) {
+                    currentDataset.filename = newName.trim();
+                }
+            }
+        }
+
+        // Delete file
+        function deleteFile(index) {
+            if (confirm('Delete file: ' + savedFiles[index].filename + '?')) {
+                savedFiles.splice(index, 1);
+                localStorage.setItem('barberMateFiles', JSON.stringify(savedFiles));
+                updateFileList();
+            }
+        }
+
+        // Reset metrics
+        function resetMetrics() {
+            accelerometerData = [];
+            currentDataset = null;
+            
+            ['band1', 'band2', 'band3'].forEach(band => {
+                document.getElementById(`${band}Pos`).innerHTML = '0.00<span class="metric-unit">g</span>';
+                document.getElementById(`${band}Neg`).innerHTML = '0.00<span class="metric-unit">g</span>';
+                document.getElementById(`${band}Bar`).style.width = '50%';
+            });
+            
+            document.getElementById('totalRMS').innerHTML = '0.000<span class="metric-unit" style="color: #ffffff;">g</span>';
+            document.getElementById('sampleCount').textContent = '0';
+            document.getElementById('saveBtn').disabled = true;
         }
 
         // Apply configuration
         function applyConfig() {
-            // Update config from input fields
             config.gravityOffset = parseFloat(document.getElementById('gravityOffset').value);
             config.filterOrder = parseInt(document.getElementById('filterOrder').value);
             
-            // Update band configurations
             config.bands[0].low = parseFloat(document.getElementById('band1Low').value);
             config.bands[0].high = parseFloat(document.getElementById('band1High').value);
             config.bands[1].low = parseFloat(document.getElementById('band2Low').value);
@@ -867,76 +1873,22 @@
             config.bands[2].low = parseFloat(document.getElementById('band3Low').value);
             config.bands[2].high = parseFloat(document.getElementById('band3High').value);
             
-            // Update bands array
             bands = [...config.bands];
             
-            // Update band labels in UI
-            document.querySelectorAll('.metric-band').forEach((elem, idx) => {
-                elem.textContent = `${bands[idx].low}-${bands[idx].high} Hz`;
-            });
+            document.getElementById('band1Range').textContent = `${bands[0].low}-${bands[0].high} Hz`;
+            document.getElementById('band2Range').textContent = `${bands[1].low}-${bands[1].high} Hz`;
+            document.getElementById('band3Range').textContent = `${bands[2].low}-${bands[2].high} Hz`;
             
-            // Hide config panel
-            toggleConfig();
-            
-            alert('Configuration applied! Changes will take effect on next recording.');
+            alert('Configuration applied!');
+            switchTab('monitor');
         }
 
-        // Check for accelerometer support on load
+        // Check sensor support on load
         window.addEventListener('load', () => {
-            if (window.DeviceMotionEvent) {
-                document.getElementById('debugSupport').textContent = 'DeviceMotionEvent supported ✓';
-                document.getElementById('debugSupport').style.color = 'var(--accent-green)';
-                
-                // Test if we can get any motion data (passive listener)
-                let testCount = 0;
-                const testListener = (event) => {
-                    testCount++;
-                    document.getElementById('debugEvents').textContent = testCount + ' (test mode)';
-                    
-                    // Check all possible data sources
-                    let debugInfo = [];
-                    
-                    if (event.accelerationIncludingGravity) {
-                        const acc = event.accelerationIncludingGravity;
-                        debugInfo.push(`withGrav: x=${acc.x} y=${acc.y} z=${acc.z}`);
-                    } else {
-                        debugInfo.push('withGrav: null');
-                    }
-                    
-                    if (event.acceleration) {
-                        const acc = event.acceleration;
-                        debugInfo.push(`noGrav: x=${acc.x} y=${acc.y} z=${acc.z}`);
-                    } else {
-                        debugInfo.push('noGrav: null');
-                    }
-                    
-                    if (event.rotationRate) {
-                        debugInfo.push('rotationRate: present');
-                    }
-                    
-                    document.getElementById('debugZ').textContent = debugInfo.join(' | ');
-                    document.getElementById('debugError').textContent = `Interval: ${event.interval}ms`;
-                };
-                
-                window.addEventListener('devicemotion', testListener);
-                
-                // Remove test listener after 5 seconds
-                setTimeout(() => {
-                    window.removeEventListener('devicemotion', testListener);
-                    if (testCount === 0) {
-                        document.getElementById('debugError').textContent = 'No motion events received in 5s';
-                    } else if (testCount === 1) {
-                        document.getElementById('debugPermission').textContent = `Only 1 event - sensors might be sleeping`;
-                    } else {
-                        document.getElementById('debugPermission').textContent = `Test OK - ${testCount} events`;
-                    }
-                }, 5000);
-                
-            } else {
-                document.getElementById('debugSupport').textContent = 'DeviceMotionEvent NOT supported ✗';
-                document.getElementById('debugSupport').style.color = 'var(--accent-red)';
-                alert('This device does not support motion sensors. Please use a smartphone.');
+            if (!window.DeviceMotionEvent) {
+                alert('This device does not support motion sensors.');
             }
+            updateFileList();
         });
     </script>
 </body>
