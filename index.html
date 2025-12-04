@@ -1186,55 +1186,174 @@
             currentDataset.psd = null;
         }
 
-        // Update PSD plot - TEMPORARILY DISABLED FOR PERFORMANCE
+        // Fast PSD calculation using optimized periodogram method
+        function calculatePSD(data, sampleRate) {
+            console.log(`Fast PSD starting: ${data.length} samples at ${sampleRate.toFixed(1)} Hz`);
+            
+            // Downsample aggressively if needed
+            let processedData = data;
+            let effectiveSampleRate = sampleRate;
+            
+            if (data.length > 2048) {
+                const step = Math.ceil(data.length / 2048);
+                processedData = [];
+                for (let i = 0; i < data.length; i += step) {
+                    processedData.push(data[i]);
+                }
+                effectiveSampleRate = sampleRate / step;
+                console.log(`Downsampled to ${processedData.length} samples at ${effectiveSampleRate.toFixed(1)} Hz`);
+            }
+            
+            // Use 128-point segments for speed
+            const segmentSize = 128;
+            const numSegments = Math.floor(processedData.length / segmentSize);
+            
+            if (numSegments < 1) {
+                return { psd: [0], freqs: [0] };
+            }
+            
+            const df = effectiveSampleRate / segmentSize;
+            const maxFreqBin = Math.min(segmentSize / 2, Math.ceil(55 / df));
+            
+            const psdSum = new Array(maxFreqBin).fill(0);
+            const freqs = [];
+            
+            for (let i = 0; i < maxFreqBin; i++) {
+                freqs.push(i * df);
+            }
+            
+            // Pre-compute trig values for speed
+            const cosTable = [];
+            const sinTable = [];
+            for (let k = 0; k < maxFreqBin; k++) {
+                cosTable[k] = [];
+                sinTable[k] = [];
+                for (let n = 0; n < segmentSize; n++) {
+                    const angle = -2 * Math.PI * k * n / segmentSize;
+                    cosTable[k][n] = Math.cos(angle);
+                    sinTable[k][n] = Math.sin(angle);
+                }
+            }
+            
+            // Process segments (limit to 20 for speed)
+            const maxSegments = Math.min(numSegments, 20);
+            
+            for (let seg = 0; seg < maxSegments; seg++) {
+                const start = seg * segmentSize;
+                const segment = processedData.slice(start, start + segmentSize);
+                
+                // Apply simple window
+                const windowed = [];
+                for (let n = 0; n < segmentSize; n++) {
+                    const w = 0.5 * (1 - Math.cos(2 * Math.PI * n / (segmentSize - 1)));
+                    windowed[n] = segment[n] * w;
+                }
+                
+                // Calculate DFT for each frequency
+                for (let k = 0; k < maxFreqBin; k++) {
+                    let real = 0;
+                    let imag = 0;
+                    
+                    for (let n = 0; n < segmentSize; n++) {
+                        real += windowed[n] * cosTable[k][n];
+                        imag += windowed[n] * sinTable[k][n];
+                    }
+                    
+                    const power = (real * real + imag * imag) / (segmentSize * segmentSize);
+                    psdSum[k] += power;
+                }
+            }
+            
+            // Average and convert to PSD
+            const psd = [];
+            for (let k = 0; k < maxFreqBin; k++) {
+                psd.push(psdSum[k] / maxSegments / effectiveSampleRate);
+            }
+            
+            console.log(`PSD complete: ${freqs.length} frequency points`);
+            
+            return { psd, freqs };
+        }
+        
+        // Update PSD plot with proper async handling
         function updatePSDPlot() {
             if (!currentDataset) return;
             
-            // Show message that PSD is being optimized
-            const statusEl = document.getElementById('psdTitle');
-            statusEl.textContent = 'PSD Analysis - Currently Being Optimized';
-            statusEl.style.color = '#f59e0b';
+            // Calculate PSD if not already calculated
+            if (!currentDataset.psd) {
+                const statusEl = document.getElementById('psdTitle');
+                statusEl.textContent = 'Calculating PSD...';
+                statusEl.style.color = '#f59e0b';
+                
+                // Use requestAnimationFrame to allow UI update before heavy calculation
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        try {
+                            const data = currentDataset.data;
+                            
+                            // Calculate means (fast)
+                            const xData = data.map(d => d.x);
+                            const yData = data.map(d => d.y);
+                            const zData = data.map(d => d.z);
+                            
+                            const tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
+                            const tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
+                            const tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
+                            
+                            currentDataset.tiltX = tiltX;
+                            currentDataset.tiltY = tiltY;
+                            currentDataset.tiltZ = tiltZ;
+                            
+                            // Remove DC component
+                            const xCentered = xData.map(v => v - tiltX);
+                            const yCentered = yData.map(v => v - tiltY);
+                            const zCentered = zData.map(v => v - tiltZ);
+                            
+                            statusEl.textContent = 'Calculating X axis...';
+                            const xPSD = calculatePSD(xCentered, currentDataset.sampleRate);
+                            
+                            statusEl.textContent = 'Calculating Y axis...';
+                            const yPSD = calculatePSD(yCentered, currentDataset.sampleRate);
+                            
+                            statusEl.textContent = 'Calculating Z axis...';
+                            const zPSD = calculatePSD(zCentered, currentDataset.sampleRate);
+                            
+                            currentDataset.psd = {
+                                x: xPSD,
+                                y: yPSD,
+                                z: zPSD
+                            };
+                            
+                            statusEl.textContent = 'Finding resonances...';
+                            
+                            // Find resonances
+                            currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
+                            currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
+                            currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
+                            
+                            // Calculate ISD
+                            currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
+                            currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
+                            currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
+                            
+                            statusEl.style.color = '';
+                            
+                            // Update display
+                            updatePSDDisplay();
+                            
+                        } catch (error) {
+                            console.error('PSD error:', error);
+                            statusEl.textContent = 'ERROR: ' + error.message;
+                            statusEl.style.color = '#ef4444';
+                        }
+                    });
+                });
+                
+                return;
+            }
             
-            document.getElementById('psdStart').textContent = new Date(currentDataset.startTime).toLocaleString();
-            document.getElementById('psdDuration').textContent = currentDataset.duration.toFixed(2) + ' sec';
-            document.getElementById('psdSampleRate').textContent = currentDataset.sampleRate.toFixed(1) + ' Hz';
-            
-            document.getElementById('psdPeakX').textContent = currentDataset.peakX.toFixed(2);
-            document.getElementById('psdPeakY').textContent = currentDataset.peakY.toFixed(2);
-            document.getElementById('psdPeakZ').textContent = currentDataset.peakZ.toFixed(2);
-            
-            document.getElementById('psdRMSX').textContent = currentDataset.rmsX.toFixed(3);
-            document.getElementById('psdRMSY').textContent = currentDataset.rmsY.toFixed(3);
-            document.getElementById('psdRMSZ').textContent = currentDataset.rmsZ.toFixed(3);
-            
-            // Show temp message
-            document.getElementById('psdISDX').textContent = 'TBD';
-            document.getElementById('psdISDY').textContent = 'TBD';
-            document.getElementById('psdISDZ').textContent = 'TBD';
-            document.getElementById('psdResX').textContent = 'PSD calculation being optimized - available in next update';
-            document.getElementById('psdResY').textContent = 'PSD calculation being optimized - available in next update';
-            document.getElementById('psdResZ').textContent = 'PSD calculation being optimized - available in next update';
-            
-            const tiltX = currentDataset.data.reduce((sum, d) => sum + d.x, 0) / currentDataset.data.length;
-            const tiltY = currentDataset.data.reduce((sum, d) => sum + d.y, 0) / currentDataset.data.length;
-            const tiltZ = currentDataset.data.reduce((sum, d) => sum + d.z, 0) / currentDataset.data.length;
-            
-            document.getElementById('psdTiltX').textContent = tiltX.toFixed(2);
-            document.getElementById('psdTiltY').textContent = tiltY.toFixed(2);
-            document.getElementById('psdTiltZ').textContent = tiltZ.toFixed(2);
-            
-            // Clear canvas
-            const canvas = document.getElementById('psdCanvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'black';
-            ctx.font = '16px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('PSD plot temporarily disabled', canvas.width/2, canvas.height/2);
-            ctx.fillText('Performance optimization in progress', canvas.width/2, canvas.height/2 + 25);
+            // PSD already calculated
+            updatePSDDisplay();
         }
 
         // Update PSD display (separate from calculation)
