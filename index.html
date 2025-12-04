@@ -309,6 +309,63 @@
         <button class="btn primary" id="startBtn" onclick="toggleRecording()">START MONITORING</button>
         <button class="btn secondary" id="resetBtn" onclick="resetMetrics()" disabled>RESET DATA</button>
         <button class="btn secondary" id="saveBtn" onclick="saveResults()" disabled>SAVE RESULTS</button>
+        <button class="btn secondary" id="configBtn" onclick="toggleConfig()">CONFIGURATION</button>
+    </div>
+
+    <div id="configPanel" class="metric-card" style="display: none; margin-bottom: 16px;">
+        <div class="metric-header">
+            <span class="metric-label">Configuration</span>
+        </div>
+        <div style="padding: 8px 0;">
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">GRAVITY OFFSET (m/s²)</label>
+                <input type="number" id="gravityOffset" value="9.8" step="0.1" style="width: 100%; padding: 8px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace;">
+            </div>
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; font-size: 11px; color: var(--text-secondary); margin-bottom: 4px;">FILTER ORDER</label>
+                <input type="number" id="filterOrder" value="4" min="2" max="8" step="2" style="width: 100%; padding: 8px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace;">
+            </div>
+            <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                <div style="font-size: 11px; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">BAND 1 (Primary) - Hz</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-secondary);">LOW</label>
+                        <input type="number" id="band1Low" value="0.5" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-secondary);">HIGH</label>
+                        <input type="number" id="band1High" value="3.5" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    </div>
+                </div>
+            </div>
+            <div style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);">
+                <div style="font-size: 11px; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">BAND 2 (Chop) - Hz</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-secondary);">LOW</label>
+                        <input type="number" id="band2Low" value="3.5" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-secondary);">HIGH</label>
+                        <input type="number" id="band2High" value="9.0" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    </div>
+                </div>
+            </div>
+            <div style="margin-bottom: 12px;">
+                <div style="font-size: 11px; font-weight: bold; color: var(--text-secondary); margin-bottom: 8px;">BAND 3 (Secondary) - Hz</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-secondary);">LOW</label>
+                        <input type="number" id="band3Low" value="9.0" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 10px; color: var(--text-secondary);">HIGH</label>
+                        <input type="number" id="band3High" value="15.0" step="0.1" style="width: 100%; padding: 6px; background: var(--bg-dark); border: 1px solid var(--border-color); color: var(--text-primary); font-family: monospace; font-size: 12px;">
+                    </div>
+                </div>
+            </div>
+            <button class="btn primary" onclick="applyConfig()" style="width: 100%; margin-top: 8px;">APPLY CONFIGURATION</button>
+        </div>
     </div>
 
     <div id="recordingTime" class="recording-time" style="display: none;">00:00</div>
@@ -412,12 +469,19 @@
         let eventCount = 0;
         let lastZValue = null;
 
-        // Frequency bands configuration
-        const bands = [
-            { name: 'band1', low: 0.5, high: 3.5 },
-            { name: 'band2', low: 3.5, high: 9.0 },
-            { name: 'band3', low: 9.0, high: 15.0 }
-        ];
+        // Configuration parameters
+        let config = {
+            gravityOffset: 9.8,
+            filterOrder: 4,
+            bands: [
+                { name: 'band1', low: 0.5, high: 3.5, label: 'Primary' },
+                { name: 'band2', low: 3.5, high: 9.0, label: 'Chop' },
+                { name: 'band3', low: 9.0, high: 15.0, label: 'Secondary' }
+            ]
+        };
+
+        // Frequency bands configuration (will be updated from config)
+        let bands = [...config.bands];
 
         // Butterworth bandpass filter coefficients (2nd order)
         function designButterworthBandpass(lowFreq, highFreq, sampleRate) {
@@ -435,76 +499,81 @@
         }
 
         // Apply bandpass filter to data
+        // Butterworth bandpass filter using cascaded biquad sections
         function bandpassFilter(data, lowFreq, highFreq, sampleRate) {
             if (data.length < 10) return data;
-
-            // High-pass filter (remove DC and low frequencies)
-            let highPassed = [];
-            const alpha = 0.95; // High-pass coefficient
-            highPassed[0] = data[0];
-            for (let i = 1; i < data.length; i++) {
-                highPassed[i] = alpha * (highPassed[i-1] + data[i] - data[i-1]);
-            }
-
-            // Low-pass filter
-            const windowSize = Math.max(3, Math.floor(sampleRate / (highFreq * 2)));
-            let filtered = [];
             
-            for (let i = 0; i < highPassed.length; i++) {
-                let sum = 0;
-                let count = 0;
-                const halfWindow = Math.floor(windowSize / 2);
-                
-                for (let j = Math.max(0, i - halfWindow); j <= Math.min(highPassed.length - 1, i + halfWindow); j++) {
-                    sum += highPassed[j];
-                    count++;
-                }
-                filtered[i] = sum / count;
+            const order = config.filterOrder;
+            
+            // High-pass stage (removes frequencies below lowFreq)
+            const alphaHP = Math.exp(-2 * Math.PI * lowFreq / sampleRate);
+            let highPassed = new Array(data.length);
+            highPassed[0] = data[0];
+            
+            for (let i = 1; i < data.length; i++) {
+                highPassed[i] = alphaHP * (highPassed[i-1] + data[i] - data[i-1]);
             }
-
-            // Apply frequency-specific filtering
-            const freqRatio = highFreq / lowFreq;
-            if (freqRatio < 3) {
-                // Narrow band - apply more aggressive filtering
-                const narrowWindowSize = Math.floor(sampleRate / ((lowFreq + highFreq) / 2));
-                let narrowFiltered = [];
-                for (let i = 0; i < filtered.length; i++) {
-                    let sum = 0;
-                    let count = 0;
-                    const halfWindow = Math.floor(narrowWindowSize / 2);
-                    
-                    for (let j = Math.max(0, i - halfWindow); j <= Math.min(filtered.length - 1, i + halfWindow); j++) {
-                        sum += filtered[j];
-                        count++;
-                    }
-                    narrowFiltered[i] = sum / count;
+            
+            // Apply high-pass multiple times for higher order
+            for (let pass = 1; pass < order / 2; pass++) {
+                for (let i = 1; i < highPassed.length; i++) {
+                    highPassed[i] = alphaHP * (highPassed[i-1] + highPassed[i] - highPassed[i-1]);
                 }
-                return narrowFiltered;
             }
-
-            return filtered;
+            
+            // Low-pass stage (removes frequencies above highFreq)
+            const alphaLP = Math.exp(-2 * Math.PI * highFreq / sampleRate);
+            let bandPassed = new Array(highPassed.length);
+            bandPassed[0] = highPassed[0];
+            
+            for (let i = 1; i < highPassed.length; i++) {
+                bandPassed[i] = (1 - alphaLP) * highPassed[i] + alphaLP * bandPassed[i-1];
+            }
+            
+            // Apply low-pass multiple times for higher order
+            for (let pass = 1; pass < order / 2; pass++) {
+                for (let i = 1; i < bandPassed.length; i++) {
+                    bandPassed[i] = (1 - alphaLP) * bandPassed[i] + alphaLP * bandPassed[i-1];
+                }
+            }
+            
+            return bandPassed;
         }
 
-        // Calculate RMS for positive and negative values
-        function calculateRMS(data) {
-            if (data.length === 0) return { positive: 0, negative: 0, total: 0 };
+        // Calculate RMS in time domain: filter first, then separate positive/negative, then compute RMS
+        function calculateRMSTimedom(filteredData) {
+            if (filteredData.length === 0) return { positive: 0, negative: 0, total: 0, rawPositive: [], rawNegative: [] };
 
-            const positiveValues = data.filter(v => v > 0);
-            const negativeValues = data.filter(v => v < 0);
+            // Separate positive and negative values from filtered signal
+            const positiveValues = [];
+            const negativeValues = [];
+            
+            for (let i = 0; i < filteredData.length; i++) {
+                if (filteredData[i] > 0) {
+                    positiveValues.push(filteredData[i]);
+                } else if (filteredData[i] < 0) {
+                    negativeValues.push(filteredData[i]);
+                }
+            }
 
+            // Calculate RMS for positive values (time domain)
             const rmsPos = positiveValues.length > 0 ? 
                 Math.sqrt(positiveValues.reduce((sum, v) => sum + v * v, 0) / positiveValues.length) : 0;
             
+            // Calculate RMS for negative values (time domain)
             const rmsNeg = negativeValues.length > 0 ? 
                 Math.sqrt(negativeValues.reduce((sum, v) => sum + v * v, 0) / negativeValues.length) : 0;
 
-            const rmsTotal = data.length > 0 ? 
-                Math.sqrt(data.reduce((sum, v) => sum + v * v, 0) / data.length) : 0;
+            // Calculate total RMS (time domain)
+            const rmsTotal = filteredData.length > 0 ? 
+                Math.sqrt(filteredData.reduce((sum, v) => sum + v * v, 0) / filteredData.length) : 0;
 
             return {
                 positive: rmsPos,
                 negative: rmsNeg,
-                total: rmsTotal
+                total: rmsTotal,
+                rawPositive: positiveValues,
+                rawNegative: negativeValues
             };
         }
 
@@ -512,20 +581,23 @@
         function updateDisplay() {
             if (accelerometerData.length < 20) return; // Need minimum samples
 
-            // Extract just acceleration values (removing gravity offset of ~9.8)
+            // Extract Z-axis acceleration values (in m/s²)
             const zData = accelerometerData.map(d => d.z);
             
-            // Remove gravity component (estimate as mean)
-            const mean = zData.reduce((a, b) => a + b, 0) / zData.length;
-            const zDataNoGravity = zData.map(v => v - mean);
+            // Remove gravity component using tunable offset
+            const gravityOffsetValue = config.gravityOffset;
+            const zDataNoGravity = zData.map(v => v - gravityOffsetValue);
 
             let totalRMS = 0;
             let totalSamples = 0;
 
-            // Process each frequency band
+            // Process each frequency band with new order of operations:
+            // 1. Filter the signal
+            // 2. Separate positive and negative from filtered signal
+            // 3. Calculate RMS for each in time domain
             bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMS(filtered);
+                const rms = calculateRMSTimedom(filtered);
 
                 // Update display
                 document.getElementById(`${band.name}Pos`).innerHTML = 
@@ -720,8 +792,8 @@
 
             // Calculate final results
             const zData = accelerometerData.map(d => d.z);
-            const mean = zData.reduce((a, b) => a + b, 0) / zData.length;
-            const zDataNoGravity = zData.map(v => v - mean);
+            const gravityOffsetValue = config.gravityOffset;
+            const zDataNoGravity = zData.map(v => v - gravityOffsetValue);
 
             const duration = (accelerometerData[accelerometerData.length - 1].time - 
                             accelerometerData[0].time) / 1000;
@@ -733,13 +805,15 @@
                 duration_seconds: duration.toFixed(2),
                 sample_count: accelerometerData.length,
                 sample_rate_hz: (accelerometerData.length / duration).toFixed(1),
+                gravity_offset_ms2: gravityOffsetValue.toFixed(2),
+                filter_order: config.filterOrder,
                 bands: {}
             };
 
             // Process each band
             bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMS(filtered);
+                const rms = calculateRMSTimedom(filtered);
                 
                 results.bands[`${band.low}-${band.high}Hz`] = {
                     upward_rms_g: rms.positive.toFixed(4),
@@ -753,7 +827,7 @@
             let totalRMS = 0;
             bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMS(filtered);
+                const rms = calculateRMSTimedom(filtered);
                 totalRMS += rms.total * rms.total;
             });
             results.overall_rms_g = Math.sqrt(totalRMS / bands.length).toFixed(4);
@@ -771,6 +845,40 @@
             URL.revokeObjectURL(url);
 
             alert('Results saved as ' + filename + '.json');
+        }
+
+        // Toggle configuration panel
+        function toggleConfig() {
+            const panel = document.getElementById('configPanel');
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+
+        // Apply configuration
+        function applyConfig() {
+            // Update config from input fields
+            config.gravityOffset = parseFloat(document.getElementById('gravityOffset').value);
+            config.filterOrder = parseInt(document.getElementById('filterOrder').value);
+            
+            // Update band configurations
+            config.bands[0].low = parseFloat(document.getElementById('band1Low').value);
+            config.bands[0].high = parseFloat(document.getElementById('band1High').value);
+            config.bands[1].low = parseFloat(document.getElementById('band2Low').value);
+            config.bands[1].high = parseFloat(document.getElementById('band2High').value);
+            config.bands[2].low = parseFloat(document.getElementById('band3Low').value);
+            config.bands[2].high = parseFloat(document.getElementById('band3High').value);
+            
+            // Update bands array
+            bands = [...config.bands];
+            
+            // Update band labels in UI
+            document.querySelectorAll('.metric-band').forEach((elem, idx) => {
+                elem.textContent = `${bands[idx].low}-${bands[idx].high} Hz`;
+            });
+            
+            // Hide config panel
+            toggleConfig();
+            
+            alert('Configuration applied! Changes will take effect on next recording.');
         }
 
         // Check for accelerometer support on load
