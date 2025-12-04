@@ -1041,64 +1041,78 @@
             return { real: realOut, imag: imagOut };
         }
 
-        // Calculate PSD with aggressive optimization for performance
+        // Calculate PSD using Welch's method (faster, more robust)
         function calculatePSD(data, sampleRate) {
-            // VERY aggressive downsampling for performance
-            let processedData = data;
-            let effectiveSampleRate = sampleRate;
+            console.log(`Starting PSD for ${data.length} samples at ${sampleRate.toFixed(1)} Hz`);
             
-            const maxSamples = 2048; // Reduced from 8192 to 2048 for better performance
-            if (data.length > maxSamples) {
-                const step = Math.ceil(data.length / maxSamples);
-                processedData = [];
-                for (let i = 0; i < data.length; i += step) {
-                    processedData.push(data[i]);
+            // Use Welch's method with small segments for speed
+            const segmentSize = 256; // Small segments for speed
+            const overlap = 128; // 50% overlap
+            const numSegments = Math.floor((data.length - overlap) / (segmentSize - overlap));
+            
+            if (numSegments < 1) {
+                console.warn('Not enough data for PSD');
+                return { psd: [0], freqs: [0] };
+            }
+            
+            console.log(`Using ${numSegments} segments of ${segmentSize} points`);
+            
+            // Initialize averaged PSD
+            const psdAvg = new Array(segmentSize / 2).fill(0);
+            
+            // Process each segment
+            for (let seg = 0; seg < Math.min(numSegments, 20); seg++) { // Limit to 20 segments max
+                const start = seg * (segmentSize - overlap);
+                const segment = data.slice(start, start + segmentSize);
+                
+                if (segment.length < segmentSize) break;
+                
+                // Apply Hanning window
+                const windowed = segment.map((v, i) => 
+                    v * 0.5 * (1 - Math.cos(2 * Math.PI * i / (segmentSize - 1)))
+                );
+                
+                // Simple DFT (not FFT) for just the frequencies we need (0-55Hz)
+                const df = sampleRate / segmentSize;
+                const maxFreq = 55;
+                const maxBin = Math.min(segmentSize / 2, Math.ceil(maxFreq / df));
+                
+                for (let k = 0; k < maxBin; k++) {
+                    let real = 0;
+                    let imag = 0;
+                    const freq = k * df;
+                    
+                    // Only calculate if frequency is in our range
+                    if (freq <= maxFreq) {
+                        // Optimized DFT for single frequency
+                        const omega = -2 * Math.PI * k / segmentSize;
+                        for (let n = 0; n < segmentSize; n++) {
+                            const angle = omega * n;
+                            real += windowed[n] * Math.cos(angle);
+                            imag += windowed[n] * Math.sin(angle);
+                        }
+                        
+                        const power = (real * real + imag * imag) / (segmentSize * segmentSize);
+                        psdAvg[k] += power;
+                    }
                 }
-                effectiveSampleRate = sampleRate / step;
-                console.log(`PSD: Downsampled to ${processedData.length} points at ${effectiveSampleRate.toFixed(1)} Hz`);
             }
             
-            // Pad to next power of 2
-            let n = 1;
-            while (n < processedData.length) n <<= 1;
-            
-            // Hard limit
-            if (n > 4096) {
-                n = 4096;
-                processedData = processedData.slice(0, n);
-                console.warn('Limited to 4096 FFT points for performance');
-            }
-            
-            const real = new Array(n).fill(0);
-            const imag = new Array(n).fill(0);
-            
-            // Copy data and apply Hanning window
-            for (let i = 0; i < processedData.length; i++) {
-                const window = 0.5 * (1 - Math.cos(2 * Math.PI * i / (processedData.length - 1)));
-                real[i] = processedData[i] * window;
-            }
-            
-            // Perform FFT
-            const result = fft(real, imag);
-            
-            // Calculate power spectrum
+            // Average and create frequency array
+            const numSegmentsUsed = Math.min(numSegments, 20);
             const psd = [];
             const freqs = [];
-            const nyquist = effectiveSampleRate / 2;
-            const df = effectiveSampleRate / n;
+            const df = sampleRate / segmentSize;
             
-            const maxFreq = Math.min(55, nyquist * 0.8); // Only up to 55Hz or 80% of Nyquist
-            
-            for (let i = 0; i < n / 2; i++) {
-                const freq = i * df;
-                if (freq <= maxFreq) {
-                    const power = (result.real[i] ** 2 + result.imag[i] ** 2) / n;
-                    psd.push(power / effectiveSampleRate); // PSD in (m/s²)²/Hz
+            for (let k = 0; k < psdAvg.length; k++) {
+                const freq = k * df;
+                if (freq <= 55) {
+                    psd.push(psdAvg[k] / numSegmentsUsed);
                     freqs.push(freq);
                 }
             }
             
-            console.log(`PSD calculated: ${freqs.length} frequency points up to ${freqs[freqs.length-1].toFixed(1)} Hz`);
+            console.log(`PSD complete: ${freqs.length} points up to ${freqs[freqs.length-1].toFixed(1)} Hz`);
             
             return { psd, freqs };
         }
@@ -1172,103 +1186,55 @@
             currentDataset.psd = null;
         }
 
-        // Update PSD plot with chunked async processing
+        // Update PSD plot - TEMPORARILY DISABLED FOR PERFORMANCE
         function updatePSDPlot() {
             if (!currentDataset) return;
             
-            // Calculate PSD if not already calculated
-            if (!currentDataset.psd) {
-                // Show processing message immediately
-                const statusEl = document.getElementById('psdTitle');
-                statusEl.textContent = 'Calculating PSD... Please wait';
-                statusEl.style.color = '#f59e0b';
-                
-                // Process each axis sequentially with delays
-                setTimeout(() => {
-                    try {
-                        const data = currentDataset.data;
-                        
-                        // Limit data size aggressively for performance
-                        const maxSamples = 4096;
-                        let step = 1;
-                        if (data.length > maxSamples) {
-                            step = Math.ceil(data.length / maxSamples);
-                            console.log(`Downsampling from ${data.length} to ~${Math.floor(data.length/step)} samples`);
-                        }
-                        
-                        const xData = [];
-                        const yData = [];
-                        const zData = [];
-                        
-                        for (let i = 0; i < data.length; i += step) {
-                            xData.push(data[i].x);
-                            yData.push(data[i].y);
-                            zData.push(data[i].z);
-                        }
-                        
-                        const effectiveSampleRate = currentDataset.sampleRate / step;
-                        
-                        // Calculate means
-                        currentDataset.tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
-                        currentDataset.tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
-                        currentDataset.tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
-                        
-                        statusEl.textContent = 'Calculating X PSD...';
-                        
-                        setTimeout(() => {
-                            const xPSD = calculatePSD(xData.map(v => v - currentDataset.tiltX), effectiveSampleRate);
-                            
-                            statusEl.textContent = 'Calculating Y PSD...';
-                            
-                            setTimeout(() => {
-                                const yPSD = calculatePSD(yData.map(v => v - currentDataset.tiltY), effectiveSampleRate);
-                                
-                                statusEl.textContent = 'Calculating Z PSD...';
-                                
-                                setTimeout(() => {
-                                    const zPSD = calculatePSD(zData.map(v => v - currentDataset.tiltZ), effectiveSampleRate);
-                                    
-                                    currentDataset.psd = {
-                                        x: xPSD,
-                                        y: yPSD,
-                                        z: zPSD
-                                    };
-                                    
-                                    statusEl.textContent = 'Finding resonances...';
-                                    
-                                    setTimeout(() => {
-                                        // Find resonances
-                                        currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
-                                        currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
-                                        currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
-                                        
-                                        // Calculate ISD
-                                        currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
-                                        currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
-                                        currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
-                                        
-                                        statusEl.style.color = '';
-                                        
-                                        // Now update the plot display
-                                        updatePSDDisplay();
-                                        
-                                    }, 50);
-                                }, 50);
-                            }, 50);
-                        }, 50);
-                        
-                    } catch (error) {
-                        console.error('PSD calculation error:', error);
-                        statusEl.textContent = 'ERROR: ' + error.message;
-                        statusEl.style.color = '#ef4444';
-                    }
-                }, 50);
-                
-                return;
-            }
+            // Show message that PSD is being optimized
+            const statusEl = document.getElementById('psdTitle');
+            statusEl.textContent = 'PSD Analysis - Currently Being Optimized';
+            statusEl.style.color = '#f59e0b';
             
-            // PSD already calculated, just update display
-            updatePSDDisplay();
+            document.getElementById('psdStart').textContent = new Date(currentDataset.startTime).toLocaleString();
+            document.getElementById('psdDuration').textContent = currentDataset.duration.toFixed(2) + ' sec';
+            document.getElementById('psdSampleRate').textContent = currentDataset.sampleRate.toFixed(1) + ' Hz';
+            
+            document.getElementById('psdPeakX').textContent = currentDataset.peakX.toFixed(2);
+            document.getElementById('psdPeakY').textContent = currentDataset.peakY.toFixed(2);
+            document.getElementById('psdPeakZ').textContent = currentDataset.peakZ.toFixed(2);
+            
+            document.getElementById('psdRMSX').textContent = currentDataset.rmsX.toFixed(3);
+            document.getElementById('psdRMSY').textContent = currentDataset.rmsY.toFixed(3);
+            document.getElementById('psdRMSZ').textContent = currentDataset.rmsZ.toFixed(3);
+            
+            // Show temp message
+            document.getElementById('psdISDX').textContent = 'TBD';
+            document.getElementById('psdISDY').textContent = 'TBD';
+            document.getElementById('psdISDZ').textContent = 'TBD';
+            document.getElementById('psdResX').textContent = 'PSD calculation being optimized - available in next update';
+            document.getElementById('psdResY').textContent = 'PSD calculation being optimized - available in next update';
+            document.getElementById('psdResZ').textContent = 'PSD calculation being optimized - available in next update';
+            
+            const tiltX = currentDataset.data.reduce((sum, d) => sum + d.x, 0) / currentDataset.data.length;
+            const tiltY = currentDataset.data.reduce((sum, d) => sum + d.y, 0) / currentDataset.data.length;
+            const tiltZ = currentDataset.data.reduce((sum, d) => sum + d.z, 0) / currentDataset.data.length;
+            
+            document.getElementById('psdTiltX').textContent = tiltX.toFixed(2);
+            document.getElementById('psdTiltY').textContent = tiltY.toFixed(2);
+            document.getElementById('psdTiltZ').textContent = tiltZ.toFixed(2);
+            
+            // Clear canvas
+            const canvas = document.getElementById('psdCanvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('PSD plot temporarily disabled', canvas.width/2, canvas.height/2);
+            ctx.fillText('Performance optimization in progress', canvas.width/2, canvas.height/2 + 25);
         }
 
         // Update PSD display (separate from calculation)
