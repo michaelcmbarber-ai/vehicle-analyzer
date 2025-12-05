@@ -1393,6 +1393,16 @@
 
         // Draw PSD plot on canvas
         function drawPSDPlot() {
+            if (!currentDataset || !currentDataset.psd) {
+                console.error('Cannot draw PSD: no data');
+                return;
+            }
+            
+            console.log('Drawing PSD plot...');
+            console.log('X PSD points:', currentDataset.psd.x.psd.length);
+            console.log('Y PSD points:', currentDataset.psd.y.psd.length);
+            console.log('Z PSD points:', currentDataset.psd.z.psd.length);
+            
             const canvas = document.getElementById('psdCanvas');
             const ctx = canvas.getContext('2d');
             
@@ -1402,6 +1412,8 @@
             
             const w = canvas.width;
             const h = canvas.height;
+            
+            console.log('Canvas size:', w, 'x', h);
             
             // Clear
             ctx.fillStyle = 'white';
@@ -1415,6 +1427,8 @@
             // Get data
             const freqs = currentDataset.psd.x.freqs;
             const maxFreq = Math.min(55, freqs[freqs.length - 1]);
+            
+            console.log('Frequency range:', freqs[0], 'to', maxFreq, 'Hz');
             
             // Apply zoom and scroll
             const zoomedMaxFreq = maxFreq / plotState.zoom;
@@ -1433,6 +1447,13 @@
                     });
                 }
             });
+            
+            console.log('Max power:', maxPower);
+            
+            if (maxPower === 0) {
+                console.warn('Max power is zero - no visible data?');
+                maxPower = 1e-6; // Set minimum to avoid division by zero
+            }
             
             // Y-scale function
             const yScale = (value) => {
@@ -1499,13 +1520,20 @@
             const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
             
             ['x', 'y', 'z'].forEach(axis => {
-                if (!plotState.visibleAxes[axis]) return;
+                if (!plotState.visibleAxes[axis]) {
+                    console.log('Skipping axis', axis, '- not visible');
+                    return;
+                }
+                
+                console.log('Drawing axis', axis);
                 
                 ctx.strokeStyle = colors[axis];
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 
                 let first = true;
+                let pointCount = 0;
+                
                 currentDataset.psd[axis].psd.forEach((p, i) => {
                     const f = freqs[i];
                     if (f >= visibleMinFreq && f <= visibleMaxFreq) {
@@ -1518,9 +1546,11 @@
                         } else {
                             ctx.lineTo(x, y);
                         }
+                        pointCount++;
                     }
                 });
                 
+                console.log('Drew', pointCount, 'points for axis', axis);
                 ctx.stroke();
             });
             
