@@ -449,7 +449,6 @@
     <div class="tabs">
         <div class="tab active" onclick="switchTab('monitor')">MONITOR</div>
         <div class="tab" onclick="switchTab('psd')">PSD</div>
-        <div class="tab" onclick="switchTab('tilt')">TILT</div>
         <div class="tab" onclick="switchTab('vibration')">VIBRATION</div>
         <div class="tab" onclick="switchTab('raw')">RAW</div>
         <div class="tab" onclick="switchTab('files')">FILES</div>
@@ -592,26 +591,6 @@
     </div>
 
     <!-- TILT TAB -->
-    <div id="tilt-tab" class="tab-content">
-        <div class="plot-container">
-            <div class="plot-header" id="tiltHeader">
-                <strong>Tilt Analysis</strong> (Acceleration vs Time)
-            </div>
-            <canvas id="tiltCanvas"></canvas>
-            <div class="axis-toggles">
-                <label class="axis-toggle x">
-                    <input type="checkbox" checked onchange="updateTiltPlot()"> X
-                </label>
-                <label class="axis-toggle y">
-                    <input type="checkbox" checked onchange="updateTiltPlot()"> Y
-                </label>
-                <label class="axis-toggle z">
-                    <input type="checkbox" checked onchange="updateTiltPlot()"> Z
-                </label>
-            </div>
-        </div>
-    </div>
-
     <!-- VIBRATION TAB -->
     <div id="vibration-tab" class="tab-content">
         <div class="plot-container">
@@ -1182,6 +1161,31 @@
             currentDataset.rmsY = calcRMS(yData);
             currentDataset.rmsZ = calcRMS(zData);
             
+            // Calculate band values for Z-axis
+            const zDataNoGravity = zData.map(v => v - config.gravityOffset);
+            currentDataset.bands = [];
+            
+            let totalRMS = 0;
+            
+            bands.forEach(band => {
+                const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, currentDataset.sampleRate);
+                const rms = calculateRMSTimedom(filtered);
+                
+                currentDataset.bands.push({
+                    name: band.name,
+                    frequencyRange: `${band.low}-${band.high} Hz`,
+                    low: band.low,
+                    high: band.high,
+                    bump: rms.positive,
+                    rebound: rms.negative,
+                    total: rms.total
+                });
+                
+                totalRMS += rms.total * rms.total;
+            });
+            
+            currentDataset.totalRMS = Math.sqrt(totalRMS / bands.length);
+            
             // PSD will be calculated on-demand when viewing PSD tab
             currentDataset.psd = null;
         }
@@ -1434,7 +1438,7 @@
             ctx.fillText(`DEBUG: X=${xPoints} Y=${yPoints} Z=${zPoints} pts`, 5, debugY);
             
             // Margins
-            const margin = { top: 40, right: 30, bottom: 50, left: 70 };
+            const margin = { top: 40, right: 30, bottom: 50, left: 60 };  // Reduced left margin
             const plotW = w - margin.left - margin.right;
             const plotH = h - margin.top - margin.bottom;
             
@@ -1462,23 +1466,19 @@
             const visibleMinFreq = Math.max(0, scrollOffset);
             const visibleMaxFreq = Math.min(maxFreq, visibleMinFreq + zoomedMaxFreq);
             
-            // Find max power for scaling
+            // Find max power for scaling (across ALL frequencies, not just visible)
             let maxPower = 0;
-            let visiblePoints = 0;
             
             ['x', 'y', 'z'].forEach(axis => {
                 if (plotState.visibleAxes[axis]) {
-                    currentDataset.psd[axis].psd.forEach((p, i) => {
-                        if (freqs[i] >= visibleMinFreq && freqs[i] <= visibleMaxFreq) {
-                            maxPower = Math.max(maxPower, p);
-                            visiblePoints++;
-                        }
+                    currentDataset.psd[axis].psd.forEach((p) => {
+                        maxPower = Math.max(maxPower, p);
                     });
                 }
             });
             
             debugY += 12;
-            ctx.fillText(`MaxPow: ${maxPower.toExponential(2)} VisPts: ${visiblePoints}`, 5, debugY);
+            ctx.fillText(`MaxPow: ${maxPower.toExponential(2)}`, 5, debugY);
             
             if (maxPower === 0 || maxPower < 1e-20) {
                 maxPower = 1e-6;
@@ -1504,9 +1504,9 @@
                 return margin.left + plotW * (freq - visibleMinFreq) / (visibleMaxFreq - visibleMinFreq);
             };
             
-            // Draw grid
+            // Draw grid with thinner lines
             ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 0.5;
             
             // Vertical grid lines
             const freqStep = plotState.zoom >= 5 ? 1 : (plotState.zoom >= 2 ? 5 : 10);
@@ -1518,13 +1518,30 @@
                 ctx.stroke();
             }
             
-            // Horizontal grid lines
-            for (let i = 0; i <= 5; i++) {
-                const y = margin.top + (plotH * i / 5);
-                ctx.beginPath();
-                ctx.moveTo(margin.left, y);
-                ctx.lineTo(margin.left + plotW, y);
-                ctx.stroke();
+            // Horizontal grid lines with values
+            if (plotState.yScale === 'log') {
+                const logMin = -10;
+                const logMax = Math.max(-5, Math.log10(maxPower) + 0.5);
+                
+                for (let logPower = Math.ceil(logMin); logPower <= Math.floor(logMax); logPower++) {
+                    const value = Math.pow(10, logPower);
+                    const y = yScale(value);
+                    
+                    if (y >= margin.top && y <= margin.top + plotH) {
+                        ctx.beginPath();
+                        ctx.moveTo(margin.left, y);
+                        ctx.lineTo(margin.left + plotW, y);
+                        ctx.stroke();
+                    }
+                }
+            } else {
+                for (let i = 0; i <= 5; i++) {
+                    const y = margin.top + (plotH * i / 5);
+                    ctx.beginPath();
+                    ctx.moveTo(margin.left, y);
+                    ctx.lineTo(margin.left + plotW, y);
+                    ctx.stroke();
+                }
             }
             
             // Draw axes
@@ -1536,14 +1553,14 @@
             ctx.lineTo(margin.left + plotW, margin.top + plotH);
             ctx.stroke();
             
-            // Draw data
+            // Draw data with thinner lines
             const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
             
             ['x', 'y', 'z'].forEach(axis => {
                 if (!plotState.visibleAxes[axis]) return;
                 
                 ctx.strokeStyle = colors[axis];
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 1.5;  // Thinner line
                 ctx.beginPath();
                 
                 let first = true;
@@ -1597,7 +1614,31 @@
             
             // Y-axis tick labels
             ctx.textAlign = 'right';
+            ctx.fillStyle = 'black';
+            ctx.font = '10px Arial';
+            
             if (plotState.yScale === 'log') {
+                const logMin = -10;
+                const logMax = Math.max(-5, Math.log10(maxPower) + 0.5);
+                
+                for (let logPower = Math.ceil(logMin); logPower <= Math.floor(logMax); logPower++) {
+                    const value = Math.pow(10, logPower);
+                    const y = yScale(value);
+                    
+                    if (y >= margin.top && y <= margin.top + plotH) {
+                        ctx.fillText(value.toExponential(0), margin.left - 5, y + 3);
+                    }
+                }
+            } else {
+                for (let i = 0; i <= 5; i++) {
+                    const value = maxPower * (5 - i) / 5;
+                    const y = margin.top + (plotH * i / 5);
+                    ctx.fillText(value.toExponential(1), margin.left - 5, y + 3);
+                }
+            }
+            
+            ctx.textAlign = 'right';
+            if (false && plotState.yScale === 'log') {
                 for (let logPower = -2; logPower <= Math.log10(maxPower) + 1; logPower++) {
                     const y = yScale(Math.pow(10, logPower));
                     if (y >= margin.top && y <= margin.top + plotH) {
@@ -1636,118 +1677,6 @@
             if (currentDataset) drawPSDPlot();
         }
 
-        // Update Tilt plot (raw acceleration including gravity vs time)
-        function updateTiltPlot() {
-            if (!currentDataset) return;
-
-            const canvas = document.getElementById('tiltCanvas');
-            const ctx = canvas.getContext('2d');
-            
-            canvas.width = canvas.offsetWidth;
-            canvas.height = canvas.offsetHeight;
-            
-            const w = canvas.width;
-            const h = canvas.height;
-            
-            ctx.fillStyle = 'white';
-            ctx.fillRect(0, 0, w, h);
-            
-            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
-            const plotW = w - margin.left - margin.right;
-            const plotH = h - margin.top - margin.bottom;
-            
-            const data = currentDataset.data;
-            const times = data.map((d, i) => i / currentDataset.sampleRate);
-            const maxTime = times[times.length - 1];
-            
-            // Find max/min for scaling
-            let maxAcc = -Infinity, minAcc = Infinity;
-            ['x', 'y', 'z'].forEach(axis => {
-                const axisCheckbox = document.querySelector(`#tilt-tab .axis-toggle.${axis} input`);
-                if (axisCheckbox && axisCheckbox.checked) {
-                    data.forEach(d => {
-                        maxAcc = Math.max(maxAcc, d[axis]);
-                        minAcc = Math.min(minAcc, d[axis]);
-                    });
-                }
-            });
-            
-            const accRange = maxAcc - minAcc;
-            
-            // Scale functions
-            const xScale = (time) => margin.left + (time / maxTime) * plotW;
-            const yScale = (acc) => margin.top + plotH * (1 - (acc - minAcc) / accRange);
-            
-            // Draw grid
-            ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
-            for (let i = 0; i <= 5; i++) {
-                const y = margin.top + (plotH * i / 5);
-                ctx.beginPath();
-                ctx.moveTo(margin.left, y);
-                ctx.lineTo(margin.left + plotW, y);
-                ctx.stroke();
-            }
-            
-            // Draw axes
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(margin.left, margin.top);
-            ctx.lineTo(margin.left, margin.top + plotH);
-            ctx.lineTo(margin.left + plotW, margin.top + plotH);
-            ctx.stroke();
-            
-            // Draw data
-            const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
-            
-            ['x', 'y', 'z'].forEach(axis => {
-                const axisCheckbox = document.querySelector(`#tilt-tab .axis-toggle.${axis} input`);
-                if (!axisCheckbox || !axisCheckbox.checked) return;
-                
-                ctx.strokeStyle = colors[axis];
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                
-                data.forEach((d, i) => {
-                    const x = xScale(times[i]);
-                    const y = yScale(d[axis]);
-                    if (i === 0) ctx.moveTo(x, y);
-                    else ctx.lineTo(x, y);
-                });
-                
-                ctx.stroke();
-            });
-            
-            // Labels
-            ctx.fillStyle = 'black';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('Time (s)', margin.left + plotW / 2, h - 10);
-            
-            ctx.save();
-            ctx.translate(15, margin.top + plotH / 2);
-            ctx.rotate(-Math.PI / 2);
-            ctx.fillText('Acceleration (m/s²)', 0, 0);
-            ctx.restore();
-            
-            // Y-axis ticks
-            ctx.textAlign = 'right';
-            for (let i = 0; i <= 5; i++) {
-                const value = maxAcc - (accRange * i / 5);
-                const y = margin.top + (plotH * i / 5);
-                ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
-            }
-            
-            // X-axis ticks
-            ctx.textAlign = 'center';
-            for (let i = 0; i <= 5; i++) {
-                const time = (maxTime * i / 5);
-                const x = margin.left + (plotW * i / 5);
-                ctx.fillText(time.toFixed(1), x, margin.top + plotH + 20);
-            }
-        }
-
         // Update Vibration plot (high-pass filtered data vs time)
         function updateVibrationPlot() {
             if (!currentDataset) return;
@@ -1764,7 +1693,7 @@
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, w, h);
             
-            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const margin = { top: 20, right: 30, bottom: 50, left: 60 };  // Reduced left margin
             const plotW = w - margin.left - margin.right;
             const plotH = h - margin.top - margin.bottom;
             
@@ -1800,9 +1729,9 @@
             const xScale = (time) => margin.left + (time / maxTime) * plotW;
             const yScale = (acc) => margin.top + plotH / 2 - (acc / accRange) * plotH;
             
-            // Draw grid
+            // Draw grid with thinner lines
             ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 0.5;
             for (let i = 0; i <= 5; i++) {
                 const y = margin.top + (plotH * i / 5);
                 ctx.beginPath();
@@ -1813,7 +1742,7 @@
             
             // Draw axes
             ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;  // Thinner axis lines
             ctx.beginPath();
             ctx.moveTo(margin.left, margin.top);
             ctx.lineTo(margin.left, margin.top + plotH);
@@ -1822,7 +1751,7 @@
             
             // Draw zero line
             ctx.strokeStyle = '#666';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 0.5;
             ctx.setLineDash([5, 5]);
             ctx.beginPath();
             ctx.moveTo(margin.left, yScale(0));
@@ -1830,7 +1759,7 @@
             ctx.stroke();
             ctx.setLineDash([]);
             
-            // Draw data
+            // Draw data with thinner lines
             const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
             
             ['x', 'y', 'z'].forEach(axis => {
@@ -1838,7 +1767,7 @@
                 if (!axisCheckbox || !axisCheckbox.checked) return;
                 
                 ctx.strokeStyle = colors[axis];
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 1.5;  // Thinner data lines
                 ctx.beginPath();
                 
                 filteredData[axis].forEach((v, i) => {
@@ -1862,6 +1791,23 @@
             ctx.rotate(-Math.PI / 2);
             ctx.fillText('Acceleration (m/s²)', 0, 0);
             ctx.restore();
+            
+            // Y-axis tick labels
+            ctx.textAlign = 'right';
+            ctx.font = '10px Arial';
+            for (let i = 0; i <= 5; i++) {
+                const value = (accRange / 2) * (1 - 2 * i / 5);
+                const y = margin.top + (plotH * i / 5);
+                ctx.fillText(value.toFixed(2), margin.left - 5, y + 3);
+            }
+            
+            // X-axis tick labels
+            ctx.textAlign = 'center';
+            for (let i = 0; i <= 5; i++) {
+                const time = (maxTime * i / 5);
+                const x = margin.left + (plotW * i / 5);
+                ctx.fillText(time.toFixed(1), x, margin.top + plotH + 20);
+            }
         }
 
         // Update Raw plot (completely unfiltered data vs time)
@@ -1880,7 +1826,7 @@
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, w, h);
             
-            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const margin = { top: 20, right: 30, bottom: 50, left: 60 };  // Reduced left margin
             const plotW = w - margin.left - margin.right;
             const plotH = h - margin.top - margin.bottom;
             
@@ -1906,9 +1852,9 @@
             const xScale = (time) => margin.left + (time / maxTime) * plotW;
             const yScale = (acc) => margin.top + plotH * (1 - (acc - minAcc) / accRange);
             
-            // Draw grid
+            // Draw grid with thinner lines
             ctx.strokeStyle = '#e0e0e0';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 0.5;
             for (let i = 0; i <= 5; i++) {
                 const y = margin.top + (plotH * i / 5);
                 ctx.beginPath();
@@ -1917,9 +1863,9 @@
                 ctx.stroke();
             }
             
-            // Draw axes
+            // Draw axes with thinner lines
             ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.moveTo(margin.left, margin.top);
             ctx.lineTo(margin.left, margin.top + plotH);
