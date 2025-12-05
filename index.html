@@ -1394,14 +1394,18 @@
         // Draw PSD plot on canvas
         function drawPSDPlot() {
             if (!currentDataset || !currentDataset.psd) {
-                console.error('Cannot draw PSD: no data');
+                const canvas = document.getElementById('psdCanvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'red';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('ERROR: No PSD data available', canvas.width/2, canvas.height/2);
                 return;
             }
-            
-            console.log('Drawing PSD plot...');
-            console.log('X PSD points:', currentDataset.psd.x.psd.length);
-            console.log('Y PSD points:', currentDataset.psd.y.psd.length);
-            console.log('Z PSD points:', currentDataset.psd.z.psd.length);
             
             const canvas = document.getElementById('psdCanvas');
             const ctx = canvas.getContext('2d');
@@ -1413,22 +1417,44 @@
             const w = canvas.width;
             const h = canvas.height;
             
-            console.log('Canvas size:', w, 'x', h);
-            
             // Clear
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, w, h);
             
+            // Debug info
+            let debugY = 15;
+            ctx.fillStyle = 'blue';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'left';
+            
+            const xPoints = currentDataset.psd.x.psd.length;
+            const yPoints = currentDataset.psd.y.psd.length;
+            const zPoints = currentDataset.psd.z.psd.length;
+            
+            ctx.fillText(`DEBUG: X=${xPoints} Y=${yPoints} Z=${zPoints} pts`, 5, debugY);
+            
             // Margins
-            const margin = { top: 20, right: 30, bottom: 50, left: 70 };
+            const margin = { top: 40, right: 30, bottom: 50, left: 70 };
             const plotW = w - margin.left - margin.right;
             const plotH = h - margin.top - margin.bottom;
             
             // Get data
             const freqs = currentDataset.psd.x.freqs;
+            if (!freqs || freqs.length === 0) {
+                ctx.fillStyle = 'red';
+                ctx.font = '14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('ERROR: No frequency data', w/2, h/2);
+                return;
+            }
+            
             const maxFreq = Math.min(55, freqs[freqs.length - 1]);
             
-            console.log('Frequency range:', freqs[0], 'to', maxFreq, 'Hz');
+            ctx.fillStyle = 'blue';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'left';
+            debugY += 12;
+            ctx.fillText(`Freq: 0-${maxFreq.toFixed(1)} Hz`, 5, debugY);
             
             // Apply zoom and scroll
             const zoomedMaxFreq = maxFreq / plotState.zoom;
@@ -1438,29 +1464,35 @@
             
             // Find max power for scaling
             let maxPower = 0;
+            let visiblePoints = 0;
+            
             ['x', 'y', 'z'].forEach(axis => {
                 if (plotState.visibleAxes[axis]) {
                     currentDataset.psd[axis].psd.forEach((p, i) => {
                         if (freqs[i] >= visibleMinFreq && freqs[i] <= visibleMaxFreq) {
                             maxPower = Math.max(maxPower, p);
+                            visiblePoints++;
                         }
                     });
                 }
             });
             
-            console.log('Max power:', maxPower);
+            debugY += 12;
+            ctx.fillText(`MaxPow: ${maxPower.toExponential(2)} VisPts: ${visiblePoints}`, 5, debugY);
             
-            if (maxPower === 0) {
-                console.warn('Max power is zero - no visible data?');
-                maxPower = 1e-6; // Set minimum to avoid division by zero
+            if (maxPower === 0 || maxPower < 1e-20) {
+                maxPower = 1e-6;
+                debugY += 12;
+                ctx.fillStyle = 'red';
+                ctx.fillText('WARNING: Zero power - using default', 5, debugY);
             }
             
             // Y-scale function
             const yScale = (value) => {
                 if (plotState.yScale === 'log') {
-                    const logMin = -2; // 10^-2 = 0.01
-                    const logMax = Math.log10(maxPower) + 0.5;
-                    const logValue = Math.log10(Math.max(value, 1e-10));
+                    const logMin = -10;
+                    const logMax = Math.max(-5, Math.log10(maxPower) + 0.5);
+                    const logValue = Math.log10(Math.max(value, 1e-12));
                     return margin.top + plotH * (1 - (logValue - logMin) / (logMax - logMin));
                 } else {
                     return margin.top + plotH * (1 - value / maxPower);
@@ -1487,24 +1519,12 @@
             }
             
             // Horizontal grid lines
-            if (plotState.yScale === 'log') {
-                for (let logPower = -2; logPower <= Math.log10(maxPower) + 1; logPower++) {
-                    const y = yScale(Math.pow(10, logPower));
-                    if (y >= margin.top && y <= margin.top + plotH) {
-                        ctx.beginPath();
-                        ctx.moveTo(margin.left, y);
-                        ctx.lineTo(margin.left + plotW, y);
-                        ctx.stroke();
-                    }
-                }
-            } else {
-                for (let i = 0; i <= 5; i++) {
-                    const y = margin.top + (plotH * i / 5);
-                    ctx.beginPath();
-                    ctx.moveTo(margin.left, y);
-                    ctx.lineTo(margin.left + plotW, y);
-                    ctx.stroke();
-                }
+            for (let i = 0; i <= 5; i++) {
+                const y = margin.top + (plotH * i / 5);
+                ctx.beginPath();
+                ctx.moveTo(margin.left, y);
+                ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
             }
             
             // Draw axes
@@ -1520,23 +1540,18 @@
             const colors = { x: '#10b981', y: '#ec4899', z: '#3b82f6' };
             
             ['x', 'y', 'z'].forEach(axis => {
-                if (!plotState.visibleAxes[axis]) {
-                    console.log('Skipping axis', axis, '- not visible');
-                    return;
-                }
-                
-                console.log('Drawing axis', axis);
+                if (!plotState.visibleAxes[axis]) return;
                 
                 ctx.strokeStyle = colors[axis];
                 ctx.lineWidth = 2;
                 ctx.beginPath();
                 
                 let first = true;
-                let pointCount = 0;
+                let drawnPoints = 0;
                 
                 currentDataset.psd[axis].psd.forEach((p, i) => {
                     const f = freqs[i];
-                    if (f >= visibleMinFreq && f <= visibleMaxFreq) {
+                    if (f >= visibleMinFreq && f <= visibleMaxFreq && p > 0) {
                         const x = xScale(f);
                         const y = yScale(p);
                         
@@ -1546,12 +1561,17 @@
                         } else {
                             ctx.lineTo(x, y);
                         }
-                        pointCount++;
+                        drawnPoints++;
                     }
                 });
                 
-                console.log('Drew', pointCount, 'points for axis', axis);
                 ctx.stroke();
+                
+                // Show points drawn
+                debugY += 12;
+                ctx.fillStyle = colors[axis];
+                ctx.font = '10px monospace';
+                ctx.fillText(`${axis}: ${drawnPoints} drawn`, 5, debugY);
             });
             
             // Draw labels
