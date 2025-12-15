@@ -1027,75 +1027,84 @@
             return { real: realOut, imag: imagOut };
         }
 
-        // Calculate PSD using Welch's method with zero-padding for smooth curves
+        // Calculate PSD using efficient zero-padded DFT (faster than full FFT)
         function calculatePSD(data, sampleRate, zeroPadFactor = 4) {
-            console.log(`Starting PSD for ${data.length} samples at ${sampleRate.toFixed(1)} Hz, zero-pad factor: ${zeroPadFactor}`);
+            console.log(`Starting PSD: ${data.length} samples, zero-pad factor: ${zeroPadFactor}`);
             
-            // Use Welch's method with small segments for speed
-            const segmentSize = 256; // Small segments for speed
-            const overlap = 128; // 50% overlap
+            // Use small segments for speed
+            const segmentSize = 128;
+            const overlap = 64;
             const numSegments = Math.floor((data.length - overlap) / (segmentSize - overlap));
             
             if (numSegments < 1) {
-                console.warn('Not enough data for PSD');
                 return { psd: [0], freqs: [0] };
             }
             
-            // Zero-padded FFT size
+            // Zero-padding increases frequency resolution
             const fftSize = segmentSize * zeroPadFactor;
+            const df = sampleRate / fftSize;  // Better frequency resolution
             
-            console.log(`Using ${numSegments} segments of ${segmentSize} points, FFT size: ${fftSize}`);
+            // Only calculate up to 55 Hz
+            const maxFreqBin = Math.ceil(55 / df);
             
-            // Initialize averaged PSD
-            const psdAvg = new Array(fftSize / 2).fill(0);
+            console.log(`Segments: ${numSegments}, FFT size: ${fftSize}, Freq bins: ${maxFreqBin}`);
             
-            // Process each segment
-            const maxSegmentsToProcess = Math.min(numSegments, 20);
-            
-            for (let seg = 0; seg < maxSegmentsToProcess; seg++) {
-                const start = seg * (segmentSize - overlap);
-                const segment = data.slice(start, start + segmentSize);
-                
-                if (segment.length < segmentSize) break;
-                
-                // Apply Hanning window
-                const windowed = [];
-                for (let i = 0; i < segmentSize; i++) {
-                    const window = 0.5 * (1 - Math.cos(2 * Math.PI * i / (segmentSize - 1)));
-                    windowed.push(segment[i] * window);
-                }
-                
-                // Zero-pad to fftSize
-                const real = new Array(fftSize).fill(0);
-                const imag = new Array(fftSize).fill(0);
-                for (let i = 0; i < segmentSize; i++) {
-                    real[i] = windowed[i];
-                }
-                
-                // Perform FFT
-                const result = fft(real, imag);
-                
-                // Accumulate power
-                for (let k = 0; k < fftSize / 2; k++) {
-                    const power = (result.real[k] ** 2 + result.imag[k] ** 2) / (fftSize * fftSize);
-                    psdAvg[k] += power;
+            // Pre-compute trig tables for speed (only up to 55 Hz)
+            const cosTable = [];
+            const sinTable = [];
+            for (let k = 0; k < maxFreqBin; k++) {
+                cosTable[k] = [];
+                sinTable[k] = [];
+                for (let n = 0; n < segmentSize; n++) {
+                    const angle = -2 * Math.PI * k * n / fftSize;  // Note: fftSize for zero-padding effect
+                    cosTable[k][n] = Math.cos(angle);
+                    sinTable[k][n] = Math.sin(angle);
                 }
             }
             
-            // Average and create frequency array (only up to 55 Hz)
+            // Accumulate PSD
+            const psdSum = new Array(maxFreqBin).fill(0);
+            const maxSegs = Math.min(numSegments, 15);  // Limit segments for speed
+            
+            for (let seg = 0; seg < maxSegs; seg++) {
+                const start = seg * (segmentSize - overlap);
+                const segment = data.slice(start, start + segmentSize);
+                
+                // Apply Hanning window
+                const windowed = [];
+                for (let n = 0; n < segmentSize; n++) {
+                    const w = 0.5 * (1 - Math.cos(2 * Math.PI * n / (segmentSize - 1)));
+                    windowed[n] = segment[n] * w;
+                }
+                
+                // Calculate DFT for each frequency (zero-padding effect included in trig tables)
+                for (let k = 0; k < maxFreqBin; k++) {
+                    let real = 0;
+                    let imag = 0;
+                    
+                    for (let n = 0; n < segmentSize; n++) {
+                        real += windowed[n] * cosTable[k][n];
+                        imag += windowed[n] * sinTable[k][n];
+                    }
+                    
+                    const power = (real * real + imag * imag) / (fftSize * fftSize);
+                    psdSum[k] += power;
+                }
+            }
+            
+            // Create output arrays
             const psd = [];
             const freqs = [];
-            const df = sampleRate / fftSize;  // Frequency resolution improved by zero-padding
             
-            for (let k = 0; k < fftSize / 2; k++) {
+            for (let k = 0; k < maxFreqBin; k++) {
                 const freq = k * df;
                 if (freq <= 55) {
-                    psd.push(psdAvg[k] / maxSegmentsToProcess / sampleRate);
+                    psd.push(psdSum[k] / maxSegs / sampleRate);
                     freqs.push(freq);
                 }
             }
             
-            console.log(`PSD complete: ${freqs.length} frequency points up to ${freqs[freqs.length-1].toFixed(1)} Hz (resolution: ${df.toFixed(3)} Hz)`);
+            console.log(`PSD complete: ${freqs.length} frequency points, resolution: ${df.toFixed(3)} Hz`);
             
             return { psd, freqs };
         }
