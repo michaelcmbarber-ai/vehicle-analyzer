@@ -1425,18 +1425,6 @@
             ctx.fillStyle = 'white';
             ctx.fillRect(0, 0, w, h);
             
-            // Debug info
-            let debugY = 15;
-            ctx.fillStyle = 'blue';
-            ctx.font = '10px monospace';
-            ctx.textAlign = 'left';
-            
-            const xPoints = currentDataset.psd.x.psd.length;
-            const yPoints = currentDataset.psd.y.psd.length;
-            const zPoints = currentDataset.psd.z.psd.length;
-            
-            ctx.fillText(`DEBUG: X=${xPoints} Y=${yPoints} Z=${zPoints} pts`, 5, debugY);
-            
             // Margins
             const margin = { top: 40, right: 30, bottom: 50, left: 60 };  // Reduced left margin
             const plotW = w - margin.left - margin.right;
@@ -1453,12 +1441,6 @@
             }
             
             const maxFreq = Math.min(55, freqs[freqs.length - 1]);
-            
-            ctx.fillStyle = 'blue';
-            ctx.font = '10px monospace';
-            ctx.textAlign = 'left';
-            debugY += 12;
-            ctx.fillText(`Freq: 0-${maxFreq.toFixed(1)} Hz`, 5, debugY);
             
             // Apply zoom and scroll
             const zoomedMaxFreq = maxFreq / plotState.zoom;
@@ -1477,14 +1459,8 @@
                 }
             });
             
-            debugY += 12;
-            ctx.fillText(`MaxPow: ${maxPower.toExponential(2)}`, 5, debugY);
-            
             if (maxPower === 0 || maxPower < 1e-20) {
                 maxPower = 1e-6;
-                debugY += 12;
-                ctx.fillStyle = 'red';
-                ctx.fillText('WARNING: Zero power - using default', 5, debugY);
             }
             
             // Y-scale function
@@ -1508,8 +1484,8 @@
             ctx.strokeStyle = '#e0e0e0';
             ctx.lineWidth = 0.5;
             
-            // Vertical grid lines
-            const freqStep = plotState.zoom >= 5 ? 1 : (plotState.zoom >= 2 ? 5 : 10);
+            // Vertical grid lines - more frequent
+            const freqStep = plotState.zoom >= 10 ? 0.5 : (plotState.zoom >= 5 ? 1 : (plotState.zoom >= 2 ? 2 : 5));
             for (let f = Math.ceil(visibleMinFreq / freqStep) * freqStep; f <= visibleMaxFreq; f += freqStep) {
                 const x = xScale(f);
                 ctx.beginPath();
@@ -1564,7 +1540,6 @@
                 ctx.beginPath();
                 
                 let first = true;
-                let drawnPoints = 0;
                 
                 currentDataset.psd[axis].psd.forEach((p, i) => {
                     const f = freqs[i];
@@ -1578,17 +1553,10 @@
                         } else {
                             ctx.lineTo(x, y);
                         }
-                        drawnPoints++;
                     }
                 });
                 
                 ctx.stroke();
-                
-                // Show points drawn
-                debugY += 12;
-                ctx.fillStyle = colors[axis];
-                ctx.font = '10px monospace';
-                ctx.fillText(`${axis}: ${drawnPoints} drawn`, 5, debugY);
             });
             
             // Draw labels
@@ -1732,11 +1700,22 @@
             // Draw grid with thinner lines
             ctx.strokeStyle = '#e0e0e0';
             ctx.lineWidth = 0.5;
+            
+            // Horizontal grid lines
             for (let i = 0; i <= 5; i++) {
                 const y = margin.top + (plotH * i / 5);
                 ctx.beginPath();
                 ctx.moveTo(margin.left, y);
                 ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
+            }
+            
+            // Vertical grid lines (X-axis)
+            for (let i = 0; i <= 10; i++) {
+                const x = margin.left + (plotW * i / 10);
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + plotH);
                 ctx.stroke();
             }
             
@@ -1801,11 +1780,11 @@
                 ctx.fillText(value.toFixed(2), margin.left - 5, y + 3);
             }
             
-            // X-axis tick labels
+            // X-axis tick labels (every other grid line to avoid crowding)
             ctx.textAlign = 'center';
-            for (let i = 0; i <= 5; i++) {
-                const time = (maxTime * i / 5);
-                const x = margin.left + (plotW * i / 5);
+            for (let i = 0; i <= 10; i += 2) {
+                const time = (maxTime * i / 10);
+                const x = margin.left + (plotW * i / 10);
                 ctx.fillText(time.toFixed(1), x, margin.top + plotH + 20);
             }
         }
@@ -1855,11 +1834,22 @@
             // Draw grid with thinner lines
             ctx.strokeStyle = '#e0e0e0';
             ctx.lineWidth = 0.5;
+            
+            // Horizontal grid lines
             for (let i = 0; i <= 5; i++) {
                 const y = margin.top + (plotH * i / 5);
                 ctx.beginPath();
                 ctx.moveTo(margin.left, y);
                 ctx.lineTo(margin.left + plotW, y);
+                ctx.stroke();
+            }
+            
+            // Vertical grid lines (X-axis)
+            for (let i = 0; i <= 10; i++) {
+                const x = margin.left + (plotW * i / 10);
+                ctx.beginPath();
+                ctx.moveTo(x, margin.top);
+                ctx.lineTo(x, margin.top + plotH);
                 ctx.stroke();
             }
             
@@ -1916,11 +1906,11 @@
                 ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
             }
             
-            // X-axis ticks
+            // X-axis ticks (every other grid line to avoid crowding)
             ctx.textAlign = 'center';
-            for (let i = 0; i <= 5; i++) {
-                const time = (maxTime * i / 5);
-                const x = margin.left + (plotW * i / 5);
+            for (let i = 0; i <= 10; i += 2) {
+                const time = (maxTime * i / 10);
+                const x = margin.left + (plotW * i / 10);
                 ctx.fillText(time.toFixed(1), x, margin.top + plotH + 20);
             }
         }
