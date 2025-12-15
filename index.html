@@ -1047,7 +1047,11 @@
             // Only calculate up to 55 Hz
             const maxFreqBin = Math.ceil(55 / df);
             
-            console.log(`Segments: ${numSegments}, FFT size: ${fftSize}, Freq bins: ${maxFreqBin}`);
+            console.log(`Segments available: ${numSegments}, FFT size: ${fftSize}, Freq bins: ${maxFreqBin}`);
+            
+            // AGGRESSIVELY limit segments for speed
+            const maxSegs = Math.min(numSegments, 5);  // Only 5 segments!
+            console.log(`Processing only ${maxSegs} segments for speed`);
             
             // Pre-compute trig tables for speed (only up to 55 Hz)
             const cosTable = [];
@@ -1064,7 +1068,6 @@
             
             // Accumulate PSD
             const psdSum = new Array(maxFreqBin).fill(0);
-            const maxSegs = Math.min(numSegments, 15);  // Limit segments for speed
             
             for (let seg = 0; seg < maxSegs; seg++) {
                 const start = seg * (segmentSize - overlap);
@@ -1215,69 +1218,82 @@
                 statusEl.textContent = 'Calculating PSD...';
                 statusEl.style.color = '#f59e0b';
                 
-                // Use requestAnimationFrame to allow UI update before heavy calculation
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        try {
-                            const data = currentDataset.data;
-                            
-                            // Calculate means (fast)
-                            const xData = data.map(d => d.x);
-                            const yData = data.map(d => d.y);
-                            const zData = data.map(d => d.z);
-                            
-                            const tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
-                            const tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
-                            const tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
-                            
-                            currentDataset.tiltX = tiltX;
-                            currentDataset.tiltY = tiltY;
-                            currentDataset.tiltZ = tiltZ;
-                            
-                            // Remove DC component
-                            const xCentered = xData.map(v => v - tiltX);
-                            const yCentered = yData.map(v => v - tiltY);
-                            const zCentered = zData.map(v => v - tiltZ);
-                            
-                            statusEl.textContent = 'Calculating X axis...';
+                // Use setTimeout chain to allow UI updates between calculations
+                setTimeout(() => {
+                    try {
+                        const data = currentDataset.data;
+                        
+                        // Calculate means (fast)
+                        const xData = data.map(d => d.x);
+                        const yData = data.map(d => d.y);
+                        const zData = data.map(d => d.z);
+                        
+                        const tiltX = xData.reduce((a,b) => a+b, 0) / xData.length;
+                        const tiltY = yData.reduce((a,b) => a+b, 0) / yData.length;
+                        const tiltZ = zData.reduce((a,b) => a+b, 0) / zData.length;
+                        
+                        currentDataset.tiltX = tiltX;
+                        currentDataset.tiltY = tiltY;
+                        currentDataset.tiltZ = tiltZ;
+                        
+                        // Remove DC component
+                        const xCentered = xData.map(v => v - tiltX);
+                        const yCentered = yData.map(v => v - tiltY);
+                        const zCentered = zData.map(v => v - tiltZ);
+                        
+                        statusEl.textContent = 'Calculating X axis...';
+                        
+                        // Calculate X with delay
+                        setTimeout(() => {
                             const xPSD = calculatePSD(xCentered, currentDataset.sampleRate, config.zeroPadFactor);
                             
                             statusEl.textContent = 'Calculating Y axis...';
-                            const yPSD = calculatePSD(yCentered, currentDataset.sampleRate, config.zeroPadFactor);
                             
-                            statusEl.textContent = 'Calculating Z axis...';
-                            const zPSD = calculatePSD(zCentered, currentDataset.sampleRate, config.zeroPadFactor);
-                            
-                            currentDataset.psd = {
-                                x: xPSD,
-                                y: yPSD,
-                                z: zPSD
-                            };
-                            
-                            statusEl.textContent = 'Finding resonances...';
-                            
-                            // Find resonances
-                            currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
-                            currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
-                            currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
-                            
-                            // Calculate ISD
-                            currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
-                            currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
-                            currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
-                            
-                            statusEl.style.color = '';
-                            
-                            // Update display
-                            updatePSDDisplay();
-                            
-                        } catch (error) {
-                            console.error('PSD error:', error);
-                            statusEl.textContent = 'ERROR: ' + error.message;
-                            statusEl.style.color = '#ef4444';
-                        }
-                    });
-                });
+                            // Calculate Y with delay
+                            setTimeout(() => {
+                                const yPSD = calculatePSD(yCentered, currentDataset.sampleRate, config.zeroPadFactor);
+                                
+                                statusEl.textContent = 'Calculating Z axis...';
+                                
+                                // Calculate Z with delay
+                                setTimeout(() => {
+                                    const zPSD = calculatePSD(zCentered, currentDataset.sampleRate, config.zeroPadFactor);
+                                    
+                                    currentDataset.psd = {
+                                        x: xPSD,
+                                        y: yPSD,
+                                        z: zPSD
+                                    };
+                                    
+                                    statusEl.textContent = 'Finding resonances...';
+                                    
+                                    setTimeout(() => {
+                                        // Find resonances
+                                        currentDataset.resonancesX = findResonances(xPSD.psd, xPSD.freqs);
+                                        currentDataset.resonancesY = findResonances(yPSD.psd, yPSD.freqs);
+                                        currentDataset.resonancesZ = findResonances(zPSD.psd, zPSD.freqs);
+                                        
+                                        // Calculate ISD
+                                        currentDataset.isdX = xPSD.psd.reduce((a,b) => a+b, 0);
+                                        currentDataset.isdY = yPSD.psd.reduce((a,b) => a+b, 0);
+                                        currentDataset.isdZ = zPSD.psd.reduce((a,b) => a+b, 0);
+                                        
+                                        statusEl.style.color = '';
+                                        
+                                        // Update display
+                                        updatePSDDisplay();
+                                        
+                                    }, 50);
+                                }, 50);
+                            }, 50);
+                        }, 50);
+                        
+                    } catch (error) {
+                        console.error('PSD error:', error);
+                        statusEl.textContent = 'ERROR: ' + error.message;
+                        statusEl.style.color = '#ef4444';
+                    }
+                }, 50);
                 
                 return;
             }
