@@ -663,9 +663,9 @@
             </div>
             
             <div class="config-section">
-                <label>PSD SMOOTHNESS (Zero-Pad Factor: 1=chunky, 2=better, 4=smooth, 8=very smooth)</label>
-                <input type="number" id="zeroPadFactor" value="4" min="1" max="8" step="1">
-                <small style="color: #666; display: block; margin-top: 5px;">Higher values = smoother curves but slower calculation</small>
+                <label>PSD SMOOTHNESS (Zero-Pad Factor: 1=chunky, 2=smooth & fast, 4=very smooth, 8=ultra smooth)</label>
+                <input type="number" id="zeroPadFactor" value="2" min="1" max="8" step="1">
+                <small style="color: #666; display: block; margin-top: 5px;">Higher values = smoother curves but MUCH slower. Use 2 for daily testing, 4+ for presentations.</small>
             </div>
             
             <div class="config-section">
@@ -716,7 +716,7 @@
         let config = {
             gravityOffset: 9.8,
             filterOrder: 4,
-            zeroPadFactor: 4,  // PSD smoothness: 1=chunky, 2=better, 4=smooth, 8=very smooth
+            zeroPadFactor: 2,  // PSD smoothness: 1=chunky, 2=smooth & fast, 4=very smooth, 8=presentation quality
             bands: [
                 { name: 'band1', low: 0.5, high: 3.5, label: 'Primary' },
                 { name: 'band2', low: 3.5, high: 9.0, label: 'Chop' },
@@ -1053,14 +1053,14 @@
             const maxSegs = Math.min(numSegments, 5);  // Only 5 segments!
             console.log(`Processing only ${maxSegs} segments for speed`);
             
-            // Pre-compute trig tables for speed (only up to 55 Hz)
+            // Pre-compute trig tables for speed (only up to 55 Hz, OVER FULL FFT SIZE)
             const cosTable = [];
             const sinTable = [];
             for (let k = 0; k < maxFreqBin; k++) {
                 cosTable[k] = [];
                 sinTable[k] = [];
-                for (let n = 0; n < segmentSize; n++) {
-                    const angle = -2 * Math.PI * k * n / fftSize;  // Note: fftSize for zero-padding effect
+                for (let n = 0; n < fftSize; n++) {  // CHANGED: Full fftSize, not just segmentSize
+                    const angle = -2 * Math.PI * k * n / fftSize;
                     cosTable[k][n] = Math.cos(angle);
                     sinTable[k][n] = Math.sin(angle);
                 }
@@ -1073,21 +1073,22 @@
                 const start = seg * (segmentSize - overlap);
                 const segment = data.slice(start, start + segmentSize);
                 
-                // Apply Hanning window
-                const windowed = [];
+                // Apply Hanning window and create zero-padded array
+                const padded = new Array(fftSize).fill(0);  // CHANGED: Zero-padded array
                 for (let n = 0; n < segmentSize; n++) {
                     const w = 0.5 * (1 - Math.cos(2 * Math.PI * n / (segmentSize - 1)));
-                    windowed[n] = segment[n] * w;
+                    padded[n] = segment[n] * w;  // CHANGED: Put windowed data in padded array
                 }
+                // Remaining elements are already 0 (zero-padding)
                 
-                // Calculate DFT for each frequency (zero-padding effect included in trig tables)
+                // Calculate DFT for each frequency over full padded length
                 for (let k = 0; k < maxFreqBin; k++) {
                     let real = 0;
                     let imag = 0;
                     
-                    for (let n = 0; n < segmentSize; n++) {
-                        real += windowed[n] * cosTable[k][n];
-                        imag += windowed[n] * sinTable[k][n];
+                    for (let n = 0; n < fftSize; n++) {  // CHANGED: Loop over full fftSize
+                        real += padded[n] * cosTable[k][n];
+                        imag += padded[n] * sinTable[k][n];
                     }
                     
                     const power = (real * real + imag * imag) / (fftSize * fftSize);
