@@ -1028,8 +1028,12 @@
         }
 
         // Calculate PSD using efficient zero-padded DFT (faster than full FFT)
-        function calculatePSD(data, sampleRate, zeroPadFactor = 4) {
-            console.log(`Starting PSD: ${data.length} samples, zero-pad factor: ${zeroPadFactor}`);
+        function calculatePSD(data, sampleRate, zeroPadFactor = 2) {
+            console.log(`=== PSD CALCULATION START ===`);
+            console.log(`Data length: ${data.length} samples`);
+            console.log(`Sample rate: ${sampleRate.toFixed(2)} Hz`);
+            console.log(`Nyquist frequency: ${(sampleRate/2).toFixed(2)} Hz`);
+            console.log(`Zero-pad factor: ${zeroPadFactor}`);
             
             // Use small segments for speed
             const segmentSize = 128;
@@ -1042,24 +1046,29 @@
             
             // Zero-padding increases frequency resolution
             const fftSize = segmentSize * zeroPadFactor;
-            const df = sampleRate / fftSize;  // Better frequency resolution
+            const df = sampleRate / fftSize;  // Frequency resolution
+            const nyquist = sampleRate / 2;   // Nyquist frequency
             
-            // Only calculate up to 55 Hz
-            const maxFreqBin = Math.ceil(55 / df);
+            // CRITICAL: Only calculate up to Nyquist or 55 Hz, whichever is LOWER
+            const maxFreq = Math.min(55, nyquist * 0.9); // Stay below Nyquist
+            const maxFreqBin = Math.ceil(maxFreq / df);
             
-            console.log(`Segments available: ${numSegments}, FFT size: ${fftSize}, Freq bins: ${maxFreqBin}`);
+            console.log(`FFT size: ${fftSize}`);
+            console.log(`Frequency resolution: ${df.toFixed(3)} Hz`);
+            console.log(`Max frequency to calculate: ${maxFreq.toFixed(2)} Hz`);
+            console.log(`Number of frequency bins: ${maxFreqBin}`);
             
             // AGGRESSIVELY limit segments for speed
-            const maxSegs = Math.min(numSegments, 5);  // Only 5 segments!
-            console.log(`Processing only ${maxSegs} segments for speed`);
+            const maxSegs = Math.min(numSegments, 5);
+            console.log(`Processing ${maxSegs} segments (${numSegments} available)`);
             
-            // Pre-compute trig tables for speed (only up to 55 Hz, OVER FULL FFT SIZE)
+            // Pre-compute trig tables for speed (only up to maxFreq)
             const cosTable = [];
             const sinTable = [];
             for (let k = 0; k < maxFreqBin; k++) {
                 cosTable[k] = [];
                 sinTable[k] = [];
-                for (let n = 0; n < fftSize; n++) {  // CHANGED: Full fftSize, not just segmentSize
+                for (let n = 0; n < fftSize; n++) {
                     const angle = -2 * Math.PI * k * n / fftSize;
                     cosTable[k][n] = Math.cos(angle);
                     sinTable[k][n] = Math.sin(angle);
@@ -1074,19 +1083,18 @@
                 const segment = data.slice(start, start + segmentSize);
                 
                 // Apply Hanning window and create zero-padded array
-                const padded = new Array(fftSize).fill(0);  // CHANGED: Zero-padded array
+                const padded = new Array(fftSize).fill(0);
                 for (let n = 0; n < segmentSize; n++) {
                     const w = 0.5 * (1 - Math.cos(2 * Math.PI * n / (segmentSize - 1)));
-                    padded[n] = segment[n] * w;  // CHANGED: Put windowed data in padded array
+                    padded[n] = segment[n] * w;
                 }
-                // Remaining elements are already 0 (zero-padding)
                 
                 // Calculate DFT for each frequency over full padded length
                 for (let k = 0; k < maxFreqBin; k++) {
                     let real = 0;
                     let imag = 0;
                     
-                    for (let n = 0; n < fftSize; n++) {  // CHANGED: Loop over full fftSize
+                    for (let n = 0; n < fftSize; n++) {
                         real += padded[n] * cosTable[k][n];
                         imag += padded[n] * sinTable[k][n];
                     }
@@ -1096,19 +1104,20 @@
                 }
             }
             
-            // Create output arrays
+            // Create output arrays - only up to maxFreq
             const psd = [];
             const freqs = [];
             
             for (let k = 0; k < maxFreqBin; k++) {
                 const freq = k * df;
-                if (freq <= 55) {
+                if (freq <= maxFreq) {
                     psd.push(psdSum[k] / maxSegs / sampleRate);
                     freqs.push(freq);
                 }
             }
             
-            console.log(`PSD complete: ${freqs.length} frequency points, resolution: ${df.toFixed(3)} Hz`);
+            console.log(`PSD complete: ${freqs.length} frequency points from 0 to ${freqs[freqs.length-1].toFixed(2)} Hz`);
+            console.log(`=== PSD CALCULATION END ===`);
             
             return { psd, freqs };
         }
