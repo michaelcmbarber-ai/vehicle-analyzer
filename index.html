@@ -281,11 +281,11 @@
             top: -2px;
             height: 16px;
             width: 4px;
-            background: white;
-            border: 2px solid black;
+            background: #ffffff;  /* Pure white */
+            border: 2px solid #000000;  /* Black border for contrast */
             border-radius: 2px;
             transition: left 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.5);  /* Strong shadow + white outline */
         }
 
         .metric-card.dominant {
@@ -992,7 +992,7 @@
                 // Amplify displacement from center for more sensitivity
                 // Map 50% center to stay at 50%, but amplify deviations
                 const deviation = rawPercentage - 50; // -50 to +50
-                const amplifiedDeviation = deviation * 1.5; // Amplify by 1.5x
+                const amplifiedDeviation = deviation * 2.0; // Amplify by 2x (increased from 1.5x)
                 const percentage = Math.max(0, Math.min(100, 50 + amplifiedDeviation)); // Clamp to 0-100%
                 
                 document.getElementById(`${band.name}Bar`).style.left = `${percentage}%`;
@@ -1004,18 +1004,13 @@
                 totalSamples++;
             });
 
-            // Find the SINGLE most dominant band (only highlight if significantly stronger than others)
-            const maxPower = Math.max(...bandPowers.map(b => b.power));
-            const avgPower = bandPowers.reduce((sum, b) => sum + b.power, 0) / bandPowers.length;
-            
-            // Only highlight if:
-            // 1. Max power > 0.08g (more sensitive threshold)
-            // 2. Max power is at least 1.5x the average (clearer dominant frequency)
-            const shouldHighlight = maxPower > 0.08 && maxPower > avgPower * 1.5;
+            // Highlight any band with significant power (can highlight multiple bands)
+            const highlightThreshold = 0.06; // Lower threshold - 0.06g
             
             bandPowers.forEach(band => {
                 const cardElement = document.getElementById(`${band.name}Pos`).closest('.metric-card');
-                if (shouldHighlight && band.power === maxPower) {
+                // Highlight if this band has power above threshold
+                if (band.power > highlightThreshold) {
                     cardElement.classList.add('dominant');
                 } else {
                     cardElement.classList.remove('dominant');
