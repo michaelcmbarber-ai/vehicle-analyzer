@@ -280,18 +280,20 @@
             position: absolute;
             top: -2px;
             height: 16px;
-            width: 4px;
-            background: #ffffff;  /* Pure white */
-            border: 2px solid #000000;  /* Black border for contrast */
-            border-radius: 2px;
+            width: 6px;  /* Slightly wider */
+            background: #ffffff !important;  /* Force pure white */
+            border: 2px solid #000000;
+            border-radius: 3px;
             transition: left 0.3s ease;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.5);  /* Strong shadow + white outline */
+            box-shadow: 0 0 8px rgba(255,255,255,0.9), 0 2px 8px rgba(0,0,0,0.8);
+            z-index: 10;  /* Ensure it's on top */
         }
 
         .metric-card.dominant {
             border: 3px solid #ffd700;
             box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
             animation: glow 2s ease-in-out infinite;
+            transition: all 0.1s ease-out;  /* Quick removal */
         }
 
         @keyframes glow {
@@ -976,7 +978,7 @@
             let totalSamples = 0;
             const bandPowers = []; // Track power in each band
 
-            bands.forEach(band => {
+            bands.forEach((band, index) => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
                 const rms = calculateRMSTimedom(filtered);
 
@@ -1005,16 +1007,23 @@
             });
 
             // Highlight any band with significant power (can highlight multiple bands)
-            const highlightThreshold = 0.06; // Lower threshold - 0.06g
+            // Use hysteresis to prevent flickering: higher threshold to turn ON, lower to turn OFF
+            const highlightOnThreshold = 0.06;  // 0.06g to turn on
+            const highlightOffThreshold = 0.04; // 0.04g to turn off (lower)
             
             bandPowers.forEach(band => {
                 const cardElement = document.getElementById(`${band.name}Pos`).closest('.metric-card');
-                // Highlight if this band has power above threshold
-                if (band.power > highlightThreshold) {
+                const isCurrentlyHighlighted = cardElement.classList.contains('dominant');
+                
+                // Use hysteresis: different thresholds for on vs off
+                if (!isCurrentlyHighlighted && band.power > highlightOnThreshold) {
+                    // Turn ON: power exceeds ON threshold
                     cardElement.classList.add('dominant');
-                } else {
+                } else if (isCurrentlyHighlighted && band.power < highlightOffThreshold) {
+                    // Turn OFF: power drops below OFF threshold
                     cardElement.classList.remove('dominant');
                 }
+                // Otherwise maintain current state (prevents flickering)
             });
 
             const overallRMS = Math.sqrt(totalRMS / totalSamples);
