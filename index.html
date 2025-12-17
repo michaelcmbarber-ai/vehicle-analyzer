@@ -288,32 +288,15 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.5);
         }
 
-        .dominant-freq {
-            margin-top: 8px;
-            padding: 6px;
-            background: rgba(255, 215, 0, 0.15);
-            border: 2px solid #ffd700;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: bold;
-            color: #ffd700;
-            text-align: center;
-            display: none;
-            animation: pulse 1.5s ease-in-out infinite;
+        .metric-card.dominant {
+            border: 3px solid #ffd700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+            animation: glow 2s ease-in-out infinite;
         }
 
-        .dominant-freq.active {
-            display: block;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; border-color: #ffd700; }
-            50% { opacity: 0.7; border-color: #ffed4e; }
-        }
-
-        .freq-icon {
-            font-size: 16px;
-            margin-right: 4px;
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+            50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.8); }
         }
 
         .total-energy {
@@ -534,9 +517,6 @@
                 <div class="balance-bar">
                     <div class="balance-indicator" id="band1Bar" style="left: 50%"></div>
                 </div>
-                <div class="dominant-freq" id="band1Dominant">
-                    <span class="freq-icon">🔊</span><span id="band1DominantText">--</span>
-                </div>
             </div>
 
             <div class="metric-card">
@@ -557,9 +537,6 @@
                 <div class="balance-bar">
                     <div class="balance-indicator" id="band2Bar" style="left: 50%"></div>
                 </div>
-                <div class="dominant-freq" id="band2Dominant">
-                    <span class="freq-icon">🔊</span><span id="band2DominantText">--</span>
-                </div>
             </div>
 
             <div class="metric-card">
@@ -579,9 +556,6 @@
                 </div>
                 <div class="balance-bar">
                     <div class="balance-indicator" id="band3Bar" style="left: 50%"></div>
-                </div>
-                <div class="dominant-freq" id="band3Dominant">
-                    <span class="freq-icon">🔊</span><span id="band3DominantText">--</span>
                 </div>
             </div>
         </div>
@@ -1000,6 +974,7 @@
 
             let totalRMS = 0;
             let totalSamples = 0;
+            const bandPowers = []; // Track power in each band
 
             bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
@@ -1015,20 +990,29 @@
                 const percentage = total > 0 ? (rms.negative / total * 100) : 50;  // INVERTED: negative (rebound) determines position
                 document.getElementById(`${band.name}Bar`).style.left = `${percentage}%`;
 
-                // Detect dominant frequency in this band
-                const dominantInfo = detectDominantFrequency(filtered, band.low, band.high, actualSampleRate);
-                const dominantElement = document.getElementById(`${band.name}Dominant`);
-                const dominantText = document.getElementById(`${band.name}DominantText`);
-                
-                if (dominantInfo.isDominant) {
-                    dominantElement.classList.add('active');
-                    dominantText.textContent = `Peak at ${dominantInfo.frequency.toFixed(1)} Hz`;
-                } else {
-                    dominantElement.classList.remove('active');
-                }
+                // Store total power for this band
+                bandPowers.push({ name: band.name, power: rms.total });
 
                 totalRMS += rms.total * rms.total;
                 totalSamples++;
+            });
+
+            // Find the SINGLE most dominant band (only highlight if significantly stronger than others)
+            const maxPower = Math.max(...bandPowers.map(b => b.power));
+            const avgPower = bandPowers.reduce((sum, b) => sum + b.power, 0) / bandPowers.length;
+            
+            // Only highlight if:
+            // 1. Max power > 0.15g (much higher threshold)
+            // 2. Max power is at least 2x the average (clear dominant frequency)
+            const shouldHighlight = maxPower > 0.15 && maxPower > avgPower * 2;
+            
+            bandPowers.forEach(band => {
+                const cardElement = document.getElementById(`${band.name}Pos`).closest('.metric-card');
+                if (shouldHighlight && band.power === maxPower) {
+                    cardElement.classList.add('dominant');
+                } else {
+                    cardElement.classList.remove('dominant');
+                }
             });
 
             const overallRMS = Math.sqrt(totalRMS / totalSamples);
@@ -1038,46 +1022,7 @@
             document.getElementById('sampleCount').textContent = accelerometerData.length;
         }
 
-        // Detect dominant frequency in a filtered signal
-        function detectDominantFrequency(filteredData, lowFreq, highFreq, sampleRate) {
-            if (filteredData.length < 64) {
-                return { isDominant: false, frequency: 0, power: 0 };
-            }
-
-            // Simple autocorrelation-based frequency detection
-            const dataSegment = filteredData.slice(-128); // Use last 128 samples
-            let maxCorr = 0;
-            let bestLag = 0;
-
-            // Search for peak in autocorrelation
-            const minLag = Math.floor(sampleRate / highFreq);
-            const maxLag = Math.ceil(sampleRate / lowFreq);
-
-            for (let lag = minLag; lag < Math.min(maxLag, dataSegment.length / 2); lag++) {
-                let corr = 0;
-                for (let i = 0; i < dataSegment.length - lag; i++) {
-                    corr += dataSegment[i] * dataSegment[i + lag];
-                }
-                if (corr > maxCorr) {
-                    maxCorr = corr;
-                    bestLag = lag;
-                }
-            }
-
-            const dominantFreq = bestLag > 0 ? sampleRate / bestLag : 0;
-            
-            // Calculate RMS of filtered signal
-            const rms = Math.sqrt(dataSegment.reduce((sum, v) => sum + v*v, 0) / dataSegment.length);
-            
-            // Consider it "dominant" if RMS is above threshold (0.05g)
-            const isDominant = rms > 0.05 && dominantFreq >= lowFreq && dominantFreq <= highFreq;
-
-            return {
-                isDominant: isDominant,
-                frequency: dominantFreq,
-                power: rms
-            };
-        }
+        // Detect dominant frequency in a filtered signal (REMOVED - using simpler approach above)
 
         // FFT calculation (Cooley-Tukey algorithm)
         function fft(real, imag) {
