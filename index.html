@@ -839,6 +839,12 @@
             window.removeEventListener('devicemotion', handleMotion);
             clearInterval(recordingInterval);
 
+            // Remove gold highlighting from all bands
+            ['band1', 'band2', 'band3'].forEach(band => {
+                const cardElement = document.getElementById(`${band}Pos`).closest('.metric-card');
+                cardElement.classList.remove('dominant');
+            });
+
             // Update UI
             document.getElementById('startBtn').textContent = 'START MONITORING';
             document.getElementById('startBtn').classList.remove('recording');
@@ -1007,9 +1013,9 @@
             });
 
             // Highlight any band with significant power (can highlight multiple bands)
-            // Use hysteresis to prevent flickering: higher threshold to turn ON, lower to turn OFF
+            // Use hysteresis to prevent flickering but turn off quickly when inactive
             const highlightOnThreshold = 0.06;  // 0.06g to turn on
-            const highlightOffThreshold = 0.04; // 0.04g to turn off (lower)
+            const highlightOffThreshold = 0.045; // 0.045g to turn off (closer to ON threshold for faster response)
             
             bandPowers.forEach(band => {
                 const cardElement = document.getElementById(`${band.name}Pos`).closest('.metric-card');
@@ -2055,6 +2061,10 @@
                 document.getElementById(`${band}Pos`).innerHTML = '0.00<span class="metric-unit">g</span>';
                 document.getElementById(`${band}Neg`).innerHTML = '0.00<span class="metric-unit">g</span>';
                 document.getElementById(`${band}Bar`).style.left = '50%';
+                
+                // Remove gold highlighting
+                const cardElement = document.getElementById(`${band}Pos`).closest('.metric-card');
+                cardElement.classList.remove('dominant');
             });
             
             document.getElementById('totalRMS').innerHTML = '0.000<span class="metric-unit" style="color: #ffffff;">g</span>';
