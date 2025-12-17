@@ -987,7 +987,14 @@
 
                 // Calculate position: 0% = all bump/upward (left/blue), 50% = balanced (center/green), 100% = all rebound/downward (right/red)
                 const total = rms.positive + rms.negative;
-                const percentage = total > 0 ? (rms.negative / total * 100) : 50;  // INVERTED: negative (rebound) determines position
+                let rawPercentage = total > 0 ? (rms.negative / total * 100) : 50;
+                
+                // Amplify displacement from center for more sensitivity
+                // Map 50% center to stay at 50%, but amplify deviations
+                const deviation = rawPercentage - 50; // -50 to +50
+                const amplifiedDeviation = deviation * 1.5; // Amplify by 1.5x
+                const percentage = Math.max(0, Math.min(100, 50 + amplifiedDeviation)); // Clamp to 0-100%
+                
                 document.getElementById(`${band.name}Bar`).style.left = `${percentage}%`;
 
                 // Store total power for this band
@@ -1002,9 +1009,9 @@
             const avgPower = bandPowers.reduce((sum, b) => sum + b.power, 0) / bandPowers.length;
             
             // Only highlight if:
-            // 1. Max power > 0.15g (much higher threshold)
-            // 2. Max power is at least 2x the average (clear dominant frequency)
-            const shouldHighlight = maxPower > 0.15 && maxPower > avgPower * 2;
+            // 1. Max power > 0.08g (more sensitive threshold)
+            // 2. Max power is at least 1.5x the average (clearer dominant frequency)
+            const shouldHighlight = maxPower > 0.08 && maxPower > avgPower * 1.5;
             
             bandPowers.forEach(band => {
                 const cardElement = document.getElementById(`${band.name}Pos`).closest('.metric-card');
