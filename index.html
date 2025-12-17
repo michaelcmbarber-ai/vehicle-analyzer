@@ -289,18 +289,6 @@
             z-index: 10;  /* Ensure it's on top */
         }
 
-        .metric-card.dominant {
-            border: 3px solid #ffd700;
-            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
-            animation: glow 2s ease-in-out infinite;
-            transition: all 0.1s ease-out;  /* Quick removal */
-        }
-
-        @keyframes glow {
-            0%, 100% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-            50% { box-shadow: 0 0 30px rgba(255, 215, 0, 0.8); }
-        }
-
         .total-energy {
             background: linear-gradient(135deg, #0d4d3d, #10b981);
             border: 2px solid var(--accent-green);
@@ -785,6 +773,9 @@
             }
         }
 
+        // WakeLock for keeping screen on
+        let wakeLock = null;
+
         // Start recording
         async function startRecording() {
             try {
@@ -801,6 +792,22 @@
                 accelerometerData = [];
                 lastTimestamp = 0;
                 startTime = Date.now();
+
+                // Request WakeLock to keep screen on
+                try {
+                    if ('wakeLock' in navigator) {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        console.log('Screen WakeLock active');
+                        
+                        // Re-acquire wake lock if visibility changes
+                        wakeLock.addEventListener('release', () => {
+                            console.log('WakeLock released');
+                        });
+                    }
+                } catch (err) {
+                    console.log('WakeLock error:', err);
+                    // Continue anyway - not critical
+                }
 
                 // Update UI
                 document.getElementById('startBtn').textContent = 'STOP MONITORING';
@@ -839,11 +846,17 @@
             window.removeEventListener('devicemotion', handleMotion);
             clearInterval(recordingInterval);
 
-            // Remove gold highlighting from all bands
-            ['band1', 'band2', 'band3'].forEach(band => {
-                const cardElement = document.getElementById(`${band}Pos`).closest('.metric-card');
-                cardElement.classList.remove('dominant');
-            });
+            // Release WakeLock
+            if (wakeLock !== null) {
+                wakeLock.release()
+                    .then(() => {
+                        console.log('WakeLock released');
+                        wakeLock = null;
+                    })
+                    .catch((err) => {
+                        console.log('WakeLock release error:', err);
+                    });
+            }
 
             // Update UI
             document.getElementById('startBtn').textContent = 'START MONITORING';
@@ -982,9 +995,8 @@
 
             let totalRMS = 0;
             let totalSamples = 0;
-            const bandPowers = []; // Track power in each band
 
-            bands.forEach((band, index) => {
+            bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
                 const rms = calculateRMSTimedom(filtered);
 
@@ -1005,31 +1017,8 @@
                 
                 document.getElementById(`${band.name}Bar`).style.left = `${percentage}%`;
 
-                // Store total power for this band
-                bandPowers.push({ name: band.name, power: rms.total });
-
                 totalRMS += rms.total * rms.total;
                 totalSamples++;
-            });
-
-            // Highlight any band with significant power (can highlight multiple bands)
-            // Use hysteresis to prevent flickering but turn off quickly when inactive
-            const highlightOnThreshold = 0.06;  // 0.06g to turn on
-            const highlightOffThreshold = 0.045; // 0.045g to turn off (closer to ON threshold for faster response)
-            
-            bandPowers.forEach(band => {
-                const cardElement = document.getElementById(`${band.name}Pos`).closest('.metric-card');
-                const isCurrentlyHighlighted = cardElement.classList.contains('dominant');
-                
-                // Use hysteresis: different thresholds for on vs off
-                if (!isCurrentlyHighlighted && band.power > highlightOnThreshold) {
-                    // Turn ON: power exceeds ON threshold
-                    cardElement.classList.add('dominant');
-                } else if (isCurrentlyHighlighted && band.power < highlightOffThreshold) {
-                    // Turn OFF: power drops below OFF threshold
-                    cardElement.classList.remove('dominant');
-                }
-                // Otherwise maintain current state (prevents flickering)
             });
 
             const overallRMS = Math.sqrt(totalRMS / totalSamples);
@@ -2061,10 +2050,6 @@
                 document.getElementById(`${band}Pos`).innerHTML = '0.00<span class="metric-unit">g</span>';
                 document.getElementById(`${band}Neg`).innerHTML = '0.00<span class="metric-unit">g</span>';
                 document.getElementById(`${band}Bar`).style.left = '50%';
-                
-                // Remove gold highlighting
-                const cardElement = document.getElementById(`${band}Pos`).closest('.metric-card');
-                cardElement.classList.remove('dominant');
             });
             
             document.getElementById('totalRMS').innerHTML = '0.000<span class="metric-unit" style="color: #ffffff;">g</span>';
