@@ -457,6 +457,7 @@
     <div class="header">
         <h1>The Barber-Mate</h1>
         <p>Vertical Acceleration Analysis & XYZ PSD</p>
+        <p id="deviceIndicator" style="font-size: 10px; color: #888; margin-top: 5px;"></p>
     </div>
 
     <div class="tabs">
@@ -715,6 +716,13 @@
         // Not for external distribution or submission to AI sites
         // ========================================================================
 
+        // Detect iOS/Apple devices for signal inversion
+        const isAppleDevice = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent) || 
+                             (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const signalMultiplier = isAppleDevice ? -1 : 1;  // Invert for Apple devices
+        
+        console.log(`Device detection: ${isAppleDevice ? 'Apple/iOS' : 'Android/Other'}, Signal multiplier: ${signalMultiplier}`);
+
         // Global state
         let isRecording = false;
         let accelerometerData = [];
@@ -895,11 +903,12 @@
             if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
                 const now = Date.now();
                 
+                // Apply signal inversion for iOS devices
                 accelerometerData.push({
                     time: now,
-                    x: acc.x,
-                    y: acc.y,
-                    z: acc.z
+                    x: acc.x * signalMultiplier,
+                    y: acc.y * signalMultiplier,
+                    z: acc.z * signalMultiplier
                 });
 
                 // Update display every 100ms
@@ -2093,6 +2102,10 @@
                 alert('This device does not support motion sensors.');
             }
             updateFileList();
+            
+            // Display device detection info
+            const deviceText = isAppleDevice ? '📱 iOS Device (signals inverted)' : '🤖 Android/Other Device';
+            document.getElementById('deviceIndicator').textContent = deviceText;
         });
     </script>
 </body>
