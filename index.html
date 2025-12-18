@@ -683,6 +683,25 @@
             </div>
             
             <div class="config-section">
+                <label>ACCELEROMETER OFFSETS (m/s²) - Correction for sensor bias</label>
+                <div class="config-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <div>
+                        <small style="color: #888;">X-AXIS</small>
+                        <input type="number" id="xOffset" value="0.0" step="0.01" placeholder="X offset">
+                    </div>
+                    <div>
+                        <small style="color: #888;">Y-AXIS</small>
+                        <input type="number" id="yOffset" value="0.0" step="0.01" placeholder="Y offset">
+                    </div>
+                    <div>
+                        <small style="color: #888;">Z-AXIS</small>
+                        <input type="number" id="zOffset" value="0.0" step="0.01" placeholder="Z offset">
+                    </div>
+                </div>
+                <small style="color: #666; display: block; margin-top: 5px;">Set phone flat on table, note Raw plot values, enter negative of those values here.</small>
+            </div>
+            
+            <div class="config-section">
                 <label>BAND 1 (PRIMARY) - Hz</label>
                 <div class="config-grid">
                     <input type="number" id="band1Low" value="0.5" step="0.1" placeholder="Low">
@@ -738,6 +757,9 @@
             gravityOffset: 9.8,
             filterOrder: 4,
             zeroPadFactor: 2,  // PSD smoothness: 1=chunky, 2=smooth & fast, 4=very smooth, 8=presentation quality
+            xOffset: 0.0,  // X-axis accelerometer offset correction
+            yOffset: 0.0,  // Y-axis accelerometer offset correction
+            zOffset: 0.0,  // Z-axis accelerometer offset correction
             bands: [
                 { name: 'band1', low: 0.5, high: 3.5, label: 'Primary' },
                 { name: 'band2', low: 3.5, high: 9.0, label: 'Chop' },
@@ -903,12 +925,12 @@
             if (acc && acc.x !== null && acc.y !== null && acc.z !== null) {
                 const now = Date.now();
                 
-                // Apply signal inversion for iOS devices
+                // Apply signal inversion for iOS devices AND offset corrections
                 accelerometerData.push({
                     time: now,
-                    x: acc.x * signalMultiplier,
-                    y: acc.y * signalMultiplier,
-                    z: acc.z * signalMultiplier
+                    x: acc.x * signalMultiplier + config.xOffset,
+                    y: acc.y * signalMultiplier + config.yOffset,
+                    z: acc.z * signalMultiplier + config.zOffset
                 });
 
                 // Update display every 100ms
@@ -1786,14 +1808,34 @@
             ctx.fillText('Acceleration (m/s²)', 0, 0);
             ctx.restore();
             
-            // Y-axis tick labels
+            // Y-axis tick labels - ensure zero is always shown
             ctx.textAlign = 'right';
             ctx.font = '10px Arial';
-            for (let i = 0; i <= 5; i++) {
-                const value = (accRange / 2) * (1 - 2 * i / 5);
-                const y = margin.top + (plotH * i / 5);
-                ctx.fillText(value.toFixed(2), margin.left - 5, y + 3);
+            
+            // Always include zero in the labels
+            const zeroY = yScale(0);
+            const numTicks = 5;
+            const tickValues = [];
+            
+            // Generate tick values ensuring zero is included
+            for (let i = 0; i <= numTicks; i++) {
+                const value = (accRange / 2) * (1 - 2 * i / numTicks);
+                tickValues.push(value);
             }
+            
+            // Always add zero if it's in range and not already there
+            if (!tickValues.some(v => Math.abs(v) < 0.01)) {
+                tickValues.push(0);
+                tickValues.sort((a, b) => b - a); // Sort descending
+            }
+            
+            // Draw all tick labels
+            tickValues.forEach(value => {
+                const y = yScale(value);
+                if (y >= margin.top && y <= margin.top + plotH) {
+                    ctx.fillText(value.toFixed(2), margin.left - 5, y + 3);
+                }
+            });
             
             // X-axis tick labels (every other grid line to avoid crowding)
             ctx.textAlign = 'center';
@@ -1913,13 +1955,32 @@
             ctx.fillText('Acceleration (m/s²)', 0, 0);
             ctx.restore();
             
-            // Y-axis ticks
+            // Y-axis ticks - ensure zero is always shown
             ctx.textAlign = 'right';
-            for (let i = 0; i <= 5; i++) {
-                const value = maxAcc - (accRange * i / 5);
-                const y = margin.top + (plotH * i / 5);
-                ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
+            ctx.font = '10px Arial';
+            
+            const numTicks = 5;
+            const tickValues = [];
+            
+            // Generate tick values
+            for (let i = 0; i <= numTicks; i++) {
+                const value = maxAcc - (accRange * i / numTicks);
+                tickValues.push(value);
             }
+            
+            // Always add zero if it's in range and not already there
+            if (minAcc <= 0 && maxAcc >= 0 && !tickValues.some(v => Math.abs(v) < 0.01)) {
+                tickValues.push(0);
+                tickValues.sort((a, b) => b - a); // Sort descending
+            }
+            
+            // Draw all tick labels
+            tickValues.forEach(value => {
+                const y = yScale(value);
+                if (y >= margin.top && y <= margin.top + plotH) {
+                    ctx.fillText(value.toFixed(2), margin.left - 10, y + 4);
+                }
+            });
             
             // X-axis ticks (every other grid line to avoid crowding)
             ctx.textAlign = 'center';
@@ -2072,6 +2133,11 @@
             config.filterOrder = parseInt(document.getElementById('filterOrder').value);
             config.zeroPadFactor = parseInt(document.getElementById('zeroPadFactor').value);
             
+            // Read accelerometer offsets
+            config.xOffset = parseFloat(document.getElementById('xOffset').value) || 0.0;
+            config.yOffset = parseFloat(document.getElementById('yOffset').value) || 0.0;
+            config.zOffset = parseFloat(document.getElementById('zOffset').value) || 0.0;
+            
             config.bands[0].low = parseFloat(document.getElementById('band1Low').value);
             config.bands[0].high = parseFloat(document.getElementById('band1High').value);
             config.bands[1].low = parseFloat(document.getElementById('band2Low').value);
@@ -2084,6 +2150,8 @@
             document.getElementById('band1Range').textContent = `${bands[0].low}-${bands[0].high} Hz`;
             document.getElementById('band2Range').textContent = `${bands[1].low}-${bands[1].high} Hz`;
             document.getElementById('band3Range').textContent = `${bands[2].low}-${bands[2].high} Hz`;
+            
+            console.log('Offsets applied: X=' + config.xOffset + ', Y=' + config.yOffset + ', Z=' + config.zOffset);
             
             // Force PSD recalculation with new zero-pad factor
             if (currentDataset && currentDataset.psd) {
