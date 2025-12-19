@@ -990,7 +990,7 @@
         }
 
         // Calculate RMS in time domain
-        function calculateRMSTimedom(filteredData) {
+        function calculate95thPercentile(filteredData) {
             if (filteredData.length === 0) return { positive: 0, negative: 0, total: 0 };
 
             const positiveValues = [];
@@ -1000,20 +1000,23 @@
                 if (filteredData[i] > 0) {
                     positiveValues.push(filteredData[i]);
                 } else if (filteredData[i] < 0) {
-                    negativeValues.push(filteredData[i]);
+                    negativeValues.push(Math.abs(filteredData[i]));
                 }
             }
 
-            const rmsPos = positiveValues.length > 0 ? 
-                Math.sqrt(positiveValues.reduce((sum, v) => sum + v * v, 0) / positiveValues.length) : 0;
-            
-            const rmsNeg = negativeValues.length > 0 ? 
-                Math.sqrt(negativeValues.reduce((sum, v) => sum + v * v, 0) / negativeValues.length) : 0;
+            // Function to calculate 95th percentile
+            const percentile95 = (arr) => {
+                if (arr.length === 0) return 0;
+                const sorted = arr.slice().sort((a, b) => a - b);
+                const index = Math.floor(sorted.length * 0.95);
+                return sorted[index];
+            };
 
-            const rmsTotal = filteredData.length > 0 ? 
-                Math.sqrt(filteredData.reduce((sum, v) => sum + v * v, 0) / filteredData.length) : 0;
+            const pos95th = percentile95(positiveValues);
+            const neg95th = percentile95(negativeValues);
+            const total95th = (pos95th + neg95th) / 2;
 
-            return { positive: rmsPos, negative: rmsNeg, total: rmsTotal };
+            return { positive: pos95th, negative: neg95th, total: total95th };
         }
 
         // Update real-time display
@@ -1029,16 +1032,16 @@
 
             bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, actualSampleRate);
-                const rms = calculateRMSTimedom(filtered);
+                const percentiles = calculate95thPercentile(filtered);
 
                 document.getElementById(`${band.name}Pos`).innerHTML = 
-                    `${rms.positive.toFixed(3)}<span class="metric-unit">g</span>`;
+                    `${percentiles.positive.toFixed(3)}<span class="metric-unit">g</span>`;
                 document.getElementById(`${band.name}Neg`).innerHTML = 
-                    `${rms.negative.toFixed(3)}<span class="metric-unit">g</span>`;
+                    `${percentiles.negative.toFixed(3)}<span class="metric-unit">g</span>`;
 
                 // Calculate position: 0% = all bump/upward (left/blue), 50% = balanced (center/green), 100% = all rebound/downward (right/red)
-                const total = rms.positive + rms.negative;
-                let rawPercentage = total > 0 ? (rms.negative / total * 100) : 50;
+                const total = percentiles.positive + percentiles.negative;
+                let rawPercentage = total > 0 ? (percentiles.negative / total * 100) : 50;
                 
                 // Amplify displacement from center for more sensitivity
                 // Map 50% center to stay at 50%, but amplify deviations
@@ -1048,13 +1051,15 @@
                 
                 document.getElementById(`${band.name}Bar`).style.left = `${percentage}%`;
 
-                totalRMS += rms.total * rms.total;
+                // Sum all 95th percentile values for total energy (Option B1)
+                totalRMS += percentiles.positive + percentiles.negative;
                 totalSamples++;
             });
 
-            const overallRMS = Math.sqrt(totalRMS / totalSamples);
+            // Total energy is average of all band 95th percentiles (intensity per unit time)
+            const overallTotal = totalRMS / totalSamples;
             document.getElementById('totalRMS').innerHTML = 
-                `${overallRMS.toFixed(3)}<span class="metric-unit" style="color: #ffffff;">g</span>`;
+                `${overallTotal.toFixed(3)}<span class="metric-unit" style="color: #ffffff;">g</span>`;
 
             document.getElementById('sampleCount').textContent = accelerometerData.length;
         }
@@ -1276,26 +1281,27 @@
             const zDataNoGravity = zData.map(v => v - config.gravityOffset);
             currentDataset.bands = [];
             
-            let totalRMS = 0;
+            let totalSum = 0;
             
             bands.forEach(band => {
                 const filtered = bandpassFilter(zDataNoGravity, band.low, band.high, currentDataset.sampleRate);
-                const rms = calculateRMSTimedom(filtered);
+                const percentiles = calculate95thPercentile(filtered);
                 
                 currentDataset.bands.push({
                     name: band.name,
                     frequencyRange: `${band.low}-${band.high} Hz`,
                     low: band.low,
                     high: band.high,
-                    bump: rms.positive,
-                    rebound: rms.negative,
-                    total: rms.total
+                    bump: percentiles.positive,
+                    rebound: percentiles.negative,
+                    total: percentiles.total
                 });
                 
-                totalRMS += rms.total * rms.total;
+                totalSum += percentiles.positive + percentiles.negative;
             });
             
-            currentDataset.totalRMS = Math.sqrt(totalRMS / bands.length);
+            // Total is average of all band 95th percentiles (Option 1 - intensity per unit time)
+            currentDataset.totalRMS = totalSum / bands.length;
             
             // PSD will be calculated on-demand when viewing PSD tab
             currentDataset.psd = null;
